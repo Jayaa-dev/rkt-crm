@@ -1,0 +1,3720 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <title>RKT Motors CRM</title>
+
+  <!-- ── VIEWPORT & ENCODING ─────────────────────────────── -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover">
+
+  <!-- ── REAL PWA MANIFEST ────────────────────────────────── -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- ── PWA THEME ────────────────────────────────────────── -->
+  <meta name="theme-color" content="#1565c0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="RKT CRM">
+
+  <!-- ── iOS PWA ──────────────────────────────────────────── -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="RKT CRM">
+
+  <!-- ── iOS ICONS (inline SVG as data URI) ───────────────── -->
+  <link rel="apple-touch-icon" id="apple-icon">
+
+  <!-- ── DESCRIPTION / SEO ────────────────────────────────── -->
+  <meta name="description" content="RKT Motors Daily CRM — Inquiries, Attendance, Service & Petrol Bills">
+
+  <script>
+  // ════════════════════════════════════════════════════════════
+  // !! PASTE YOUR GAS DEPLOYMENT URL HERE !!
+  // ════════════════════════════════════════════════════════════
+  var GAS_URL = 'https://script.google.com/macros/s/AKfycbzGDQ2hyC7iWKiPfIJuDHS9znSAcWxOoqFDv52uh7l993F6SHMVH911dGL2fkps7gJZ/exec';
+  // e.g. 'https://script.google.com/macros/s/AKfy.../exec'
+  // ════════════════════════════════════════════════════════════
+
+  // ── Register Service Worker (enables PWA install) ─────────
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('/sw.js')
+        .then(function(r) { console.log('SW registered:', r.scope); })
+        .catch(function(e) { console.log('SW error:', e); });
+    });
+  }
+
+  // ── gasCall() — replaces all google.script.run calls ──────
+  function gasCall(action, params, onSuccess, onFailure) {
+    var isWrite = ['saveData','saveActivityImage','savePetrolBill'].indexOf(action) !== -1;
+    var promise;
+    if (isWrite) {
+      // POST for write operations (image uploads etc.)
+      promise = fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify(Object.assign({ action: action }, params))
+      });
+    } else {
+      // GET for read operations
+      var qs = '?action=' + encodeURIComponent(action);
+      if (params) {
+        Object.keys(params).forEach(function(k) {
+          qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(
+            typeof params[k] === 'object' ? JSON.stringify(params[k]) : params[k]
+          );
+        });
+      }
+      promise = fetch(GAS_URL + qs);
+    }
+    promise
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res.ok) { onSuccess && onSuccess(res.data); }
+        else        { onFailure && onFailure({ message: res.error }); }
+      })
+      .catch(function(err) { onFailure && onFailure({ message: err.message }); });
+  }
+  </script>
+  <style>
+    /* ── PWA SPLASH SCREEN ───────────────────────────────── */
+    #pwa-splash {
+      position: fixed; inset: 0; z-index: 9999;
+      background: linear-gradient(145deg, #c62828 0%, #1565c0 100%);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      transition: opacity 0.5s ease, visibility 0.5s ease;
+    }
+    #pwa-splash.hidden { opacity: 0; visibility: hidden; }
+    .splash-logo {
+      width: 110px; height: 110px; border-radius: 28px;
+      background: rgba(255,255,255,0.18);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 36px; color: #fff;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+      margin-bottom: 22px; letter-spacing: 1px;
+      border: 2px solid rgba(255,255,255,0.3);
+    }
+    .splash-title { font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 1px; }
+    .splash-sub   { font-size: 14px; color: rgba(255,255,255,0.75); margin-top: 6px; }
+    .splash-dots  { display: flex; gap: 7px; margin-top: 40px; }
+    .splash-dot   {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: rgba(255,255,255,0.4);
+      animation: dotPulse 1.4s ease-in-out infinite;
+    }
+    .splash-dot:nth-child(2) { animation-delay: 0.2s; }
+    .splash-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dotPulse {
+      0%, 80%, 100% { transform: scale(0.7); background: rgba(255,255,255,0.35); }
+      40%           { transform: scale(1.1); background: rgba(255,255,255,0.95); }
+    }
+
+    /* ── INSTALL BANNER ──────────────────────────────────── */
+    #pwa-install-banner {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;
+      background: #fff;
+      box-shadow: 0 -2px 20px rgba(0,0,0,0.18);
+      padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+      display: none; align-items: center; gap: 12px;
+      border-top: 3px solid var(--blue);
+      animation: slideUp 0.35s ease;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to   { transform: translateY(0);    }
+    }
+    #pwa-install-banner.show { display: flex; }
+    .install-icon {
+      width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+      background: linear-gradient(135deg, #c62828, #1565c0);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 900; font-size: 14px;
+    }
+    .install-text { flex: 1; }
+    .install-text strong { display: block; font-size: 14px; font-weight: 800; color: var(--text); }
+    .install-text span   { font-size: 12px; color: var(--muted); }
+    .install-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .btn-install {
+      background: linear-gradient(135deg, var(--red), var(--blue));
+      color: #fff; border: none; border-radius: 8px;
+      padding: 8px 14px; font-size: 13px; font-weight: 700; cursor: pointer;
+    }
+    .btn-install-dismiss {
+      background: none; border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 10px; font-size: 13px; color: var(--muted); cursor: pointer;
+    }
+
+    /* ── INSTALL GUIDES (Android + iOS) ─────────────────── */
+    #android-install-guide,
+    #ios-install-guide {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;
+      background: #fff; border-radius: 20px 20px 0 0;
+      box-shadow: 0 -4px 30px rgba(0,0,0,0.2);
+      padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+      display: none; flex-direction: column; gap: 12px;
+      border-top: 3px solid var(--blue);
+    }
+    #android-install-guide.show,
+    #ios-install-guide.show { display: flex; }
+    .ios-guide-title { font-size: 16px; font-weight: 800; color: var(--text); text-align: center; }
+    .ios-step {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--grey); border-radius: 10px; padding: 10px 12px;
+    }
+    .ios-step-icon { font-size: 22px; flex-shrink: 0; }
+    .ios-step-text { font-size: 13px; color: var(--text); line-height: 1.4; }
+    .ios-step-text strong { color: var(--blue); }
+
+    /* ── RESET & BASE ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --red:       #c62828;
+      --blue:      #1565c0;
+      --blue-lt:   #e3f2fd;
+      --red-lt:    #ffebee;
+      --green:     #2e7d32;
+      --green-lt:  #e8f5e9;
+      --amber:     #f57f17;
+      --amber-lt:  #fff8e1;
+      --grey:      #f4f6f9;
+      --border:    #e0e0e0;
+      --text:      #212121;
+      --muted:     #757575;
+      --radius:    12px;
+      --shadow:    0 2px 12px rgba(0,0,0,0.10);
+      --tab-h:     52px;
+      --safe-b:    env(safe-area-inset-bottom, 0px);
+    }
+
+    html {
+      height: 100%;
+      height: 100dvh;           /* dynamic viewport — accounts for browser chrome */
+    }
+    body {
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;         /* body must NOT scroll — only tab-content scrolls */
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      font-size: 17px;
+      line-height: 1.5;
+      background: var(--grey);
+      color: var(--text);
+      -webkit-text-size-adjust: 100%;
+      overscroll-behavior-y: none;   /* only block pull-to-refresh, not normal scroll */
+    }
+
+    /* ── LAYOUT ──────────────────────────────────────────────── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;         /* clip children, let tab-content handle scroll */
+    }
+
+    /* ── HEADER ───────────────────────────────────────────── */
+    .app-header {
+      background: #fff;
+      padding: 12px 16px 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.10);
+      border-bottom: 3px solid transparent;
+      border-image: linear-gradient(90deg,#c62828,#1565c0,#e65100) 1;
+    }
+    .logo-img {
+      height: 50px; width: auto; flex-shrink: 0;
+      object-fit: contain;
+    }
+    .header-text { flex:1; min-width:0; }
+    .header-text h1 {
+      font-size: 18px; font-weight: 900; line-height: 1.15;
+      background: linear-gradient(90deg,#c62828,#1565c0);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header-text p  { font-size: 13px; color: var(--muted); font-weight: 600; margin-top: 1px; }
+    .header-right { margin-left: auto; display:flex; align-items:center; gap:8px; }
+    #newEntryBtn {
+      display: none;
+      background: linear-gradient(135deg,var(--red),var(--blue));
+      border: none;
+      color: #fff;
+      padding: 9px 16px;
+      border-radius: 22px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+      min-height: 38px;
+    }
+    #newEntryBtn:active { opacity: 0.8; }
+    #installAppBtn {
+      background: var(--blue); border: none;
+      color: #fff; border-radius: 22px;
+      padding: 8px 14px; font-size: 13px; font-weight: 700;
+      cursor: pointer; white-space: nowrap;
+      min-height: 38px;
+      box-shadow: 0 2px 8px rgba(21,101,192,0.30);
+      display: inline-block;   /* always visible */
+    }
+    #installAppBtn:active { opacity: 0.85; }
+
+    /* ── TABS ─────────────────────────────────────────────── */
+    .tab-bar {
+      display: flex;
+      background: #fff;
+      border-bottom: 2px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      touch-action: pan-x pinch-zoom;   /* horizontal swipe + pinch zoom */
+    }
+    .tab-bar::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      flex: 0 0 auto;
+      min-width: 72px;
+      border: none;
+      background: transparent;
+      padding: 10px 6px 9px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      transition: color 0.2s, border-color 0.2s, background 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      line-height: 1.1;
+      min-height: 60px;
+    }
+    .tab-btn .tab-icon { font-size: 24px; line-height: 1; }
+    .tab-btn.active {
+      color: var(--blue);
+      border-bottom-color: var(--blue);
+      background: var(--blue-lt);
+      font-weight: 700;
+    }
+
+    /* ── SCROLLABLE CONTENT ───────────────────────────────── */
+    .tab-content {
+      flex: 1;
+      min-height: 0;            /* CRITICAL: flex child must have min-height:0 to scroll */
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      /* No touch-action here — letting overflow-x:hidden handle it.
+         Setting pan-y would block horizontal scroll on child elements. */
+    }
+    .section { display: none; padding: 12px 10px calc(32px + var(--safe-b)); }
+    .section.active { display: block; }
+
+    /* ── CARDS ────────────────────────────────────────────── */
+    .card {
+      background: #fff;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--blue);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── QUOTE ────────────────────────────────────────────── */
+    .quote-box {
+      background: linear-gradient(135deg, #e8f5e9, #e3f2fd);
+      border-left: 4px solid var(--blue);
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 16px;
+      color: var(--green);
+      font-weight: 600;
+      margin-bottom: 14px;
+      line-height: 1.6;
+    }
+
+    /* ── FORM FIELDS ──────────────────────────────────────── */
+    .field { margin-bottom: 16px; }
+    .field label {
+      display: block;
+      font-size: 14px;
+      font-weight: 700;
+      color: #444;
+      margin-bottom: 6px;
+      /* No uppercase — sentence case reads bigger */
+    }
+    input[type="text"],
+    input[type="tel"],
+    input[type="number"],
+    input[type="date"],
+    select, textarea {
+      width: 100%;
+      padding: 14px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      font-size: 16px;    /* ≥16px stops iOS Safari zoom-on-focus */
+      line-height: 1.4;
+      background: #fafafa;
+      color: var(--text);
+      appearance: auto;
+      -webkit-appearance: auto;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      min-height: 54px;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--blue);
+      background: #fff;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(21,101,192,0.12);
+    }
+    input[readonly], input[disabled], select[disabled] {
+      background: #f0f0f0;
+      color: var(--muted);
+    }
+    textarea { min-height: 80px; resize: vertical; }
+
+    /* ── FIELD ROW — always single column on mobile ──────── */
+    .field-row { display: flex; flex-direction: column; gap: 0; }
+    .field-row .field { flex: 1; min-width: 0; }
+
+    /* ── CHECKBOXES — 2-column grid ──────────────────────── */
+    .cb-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .cb-item {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--grey);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      transition: 0.15s;
+      min-height: 50px;
+    }
+    .cb-item input[type="checkbox"] {
+      width: 20px; height: 20px;
+      padding: 0; border: none;
+      background: transparent;
+      box-shadow: none;
+      flex-shrink: 0;
+      accent-color: var(--blue);
+    }
+    .cb-item:has(input:checked) {
+      background: var(--blue-lt);
+      border-color: var(--blue);
+      color: var(--blue);
+      font-weight: 700;
+    }
+
+    /* ── DIVIDER ──────────────────────────────────────────── */
+    .divider {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 7px;
+      margin: 20px 0 14px;
+    }
+
+    /* ── BUTTONS ──────────────────────────────────────────── */
+    .btn-primary {
+      width: 100%;
+      background: linear-gradient(135deg, var(--red), var(--blue));
+      color: #fff;
+      border: none;
+      padding: 16px;
+      border-radius: var(--radius);
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.20);
+      transition: opacity 0.2s, transform 0.1s;
+      min-height: 54px;
+      letter-spacing: 0.3px;
+    }
+    .btn-primary:active  { transform: scale(0.98); opacity: 0.9; }
+    .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .btn-secondary {
+      width: 100%;
+      background: #fff;
+      color: var(--blue);
+      border: 1.5px solid var(--blue);
+      padding: 14px;
+      border-radius: var(--radius);
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.15s;
+      min-height: 50px;
+    }
+    .btn-secondary:active { background: var(--blue-lt); }
+
+    /* ── BANNERS ──────────────────────────────────────────── */
+    .banner {
+      border-radius: 12px;
+      padding: 14px 15px;
+      margin-bottom: 14px;
+      font-size: 15px;
+      display: none;
+    }
+    .banner-green {
+      background: var(--green-lt);
+      border-left: 4px solid var(--green);
+      color: #1b5e20;
+    }
+    .banner-orange {
+      background: #fff3e0;
+      border-left: 4px solid #e53935;
+    }
+    .banner-title { font-weight: 700; font-size: 16px; color: var(--red); margin-bottom: 5px; }
+    .banner-body  { color: #555; line-height: 1.6; font-size: 15px; }
+
+    /* ── ERROR TEXT ───────────────────────────────────────── */
+    .field-error {
+      font-size: 13px;
+      color: var(--red);
+      margin-top: 5px;
+      display: none;
+    }
+
+    /* ── MESSAGE (showroom) ───────────────────────────────── */
+    .notice {
+      background: #fff3e0;
+      border-left: 4px solid var(--amber);
+      border-radius: 10px;
+      padding: 13px 14px;
+      font-size: 15px;
+      color: #5d4037;
+      margin-bottom: 14px;
+      display: none;
+      line-height: 1.5;
+    }
+
+    /* ── SEARCH RESULTS ───────────────────────────────────── */
+    .result-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+    }
+    .result-name { font-size: 17px; font-weight: 800; color: var(--text); }
+    .result-row  { font-size: 14px; color: var(--muted); margin-top: 5px; line-height: 1.5; }
+    .result-row strong { color: var(--text); }
+    .btn-edit {
+      margin-top: 12px;
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      padding: 11px 22px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .btn-edit:active { opacity: 0.8; }
+    .auto-remark-strip {
+      background: #fff3e0;
+      border-left: 3px solid #e53935;
+      padding: 8px 11px;
+      border-radius: 6px;
+      margin: 8px 0;
+      font-size: 14px;
+      color: #b71c1c;
+      line-height: 1.5;
+    }
+
+    /* ── STATUS BADGES ────────────────────────────────────── */
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .badge-hot       { background: var(--red-lt);   color: var(--red);   }
+    .badge-warm      { background: var(--amber-lt);  color: var(--amber); }
+    .badge-cold      { background: var(--blue-lt);   color: var(--blue);  }
+    .badge-contacted { background: var(--green-lt);  color: var(--green); }
+
+    /* ── ATTENDANCE ───────────────────────────────────────── */
+    .att-filters { display: flex; gap: 8px; margin-bottom: 12px; }
+    .att-filters .field { flex: 1; min-width: 0; margin-bottom: 0; }
+    .att-card {
+      background: #fff;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .att-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .att-avatar {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--red), var(--blue));
+      color: #fff; font-weight: 800; font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .att-name   { font-size: 17px; font-weight: 800; }
+    .att-pct    { font-size: 14px; color: var(--muted); margin-top: 2px; }
+    .att-stats  { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .att-badge  {
+      padding: 6px 12px; border-radius: 20px;
+      font-size: 14px; font-weight: 700;
+    }
+    .ab-present { background: var(--green-lt); color: var(--green); }
+    .ab-absent  { background: var(--red-lt);   color: var(--red);   }
+    .ab-working { background: var(--blue-lt);  color: var(--blue);  }
+    .pct-bar    { background: #eee; border-radius: 10px; height: 8px; overflow: hidden; margin-bottom: 14px; }
+    .pct-fill   { height: 100%; border-radius: 10px; transition: width 0.5s; }
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+    .cal-hdr  { text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); padding: 3px 0; }
+    .cal-day  {
+      aspect-ratio: 1;
+      border-radius: 6px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+    }
+    .cal-day .dn { font-size: 13px; line-height: 1; }
+    .cal-day .dl { font-size: 10px; line-height: 1; }
+    .day-present { background: #c8e6c9; color: #1b5e20; }
+    .day-absent  { background: #ffcdd2; color: #b71c1c; }
+    .day-sunday  { background: #f3f3f3; color: #bbb; }
+    .day-future  { background: #fafafa; color: #ccc; border: 1px dashed #ddd; }
+    .day-empty   { background: transparent; }
+
+    /* ── SPINNER ──────────────────────────────────────────── */
+    .spinner { text-align: center; padding: 30px; color: var(--muted); font-size: 15px; }
+
+    /* ── HIDDEN ───────────────────────────────────────────── */
+    .hidden { display: none !important; }
+
+    /* ── DASHBOARD ───────────────────────────────────────── */
+    .dash-refresh {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px; gap: 10px;
+    }
+    .dash-refresh span { font-size: 13px; color: var(--muted); }
+    .btn-refresh {
+      background: var(--blue-lt); color: var(--blue);
+      border: 1.5px solid var(--blue); border-radius: 22px;
+      padding: 9px 18px; font-size: 14px; font-weight: 700; cursor: pointer;
+      min-height: 42px; white-space: nowrap;
+    }
+
+    /* KPI grid */
+    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .kpi-card {
+      background: #fff; border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 18px 14px; text-align: center;
+    }
+    .kpi-val  { font-size: 34px; font-weight: 900; line-height: 1; }
+    .kpi-lbl  { font-size: 12px; font-weight: 700; text-transform: uppercase;
+                letter-spacing: 0.5px; margin-top: 6px; opacity: 0.80; }
+    .kpi-total { grid-column: span 2; background: linear-gradient(135deg,var(--red),var(--blue)); color:#fff; }
+    .kpi-hot   { color: var(--red);   border-top: 3px solid var(--red);   }
+    .kpi-warm  { color: var(--amber); border-top: 3px solid var(--amber); }
+    .kpi-cold  { color: var(--blue);  border-top: 3px solid var(--blue);  }
+    .kpi-cont  { color: var(--green); border-top: 3px solid var(--green); }
+
+    /* Section title */
+    .dash-section-title {
+      font-size: 14px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.5px; color: var(--blue);
+      border-left: 4px solid var(--blue); padding-left: 10px;
+      margin: 16px 0 10px;
+    }
+
+    /* Bar chart */
+    .bar-chart { display: flex; flex-direction: column; gap: 9px; }
+    .bar-row   { display: flex; align-items: center; gap: 9px; }
+    .bar-label { font-size: 13px; font-weight: 700; width: 72px; flex-shrink: 0; color: var(--text); text-align:right;
+                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar-track { flex: 1; background: #f0f0f0; border-radius: 8px; height: 22px; overflow: hidden; position: relative; }
+    .bar-fill  { height: 100%; border-radius: 8px; transition: width 0.6s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; }
+    .bar-fill span { font-size: 12px; font-weight: 700; color: #fff; }
+    .bar-val   { font-size: 13px; font-weight: 700; width: 30px; flex-shrink: 0; color: var(--muted); }
+
+    /* Stacked bar */
+    .stacked-wrap { overflow-x: auto; overflow-y: hidden; padding-bottom: 6px; touch-action: pan-x pinch-zoom; }
+    .stacked-chart { display: flex; align-items: flex-end; gap: 6px; min-width: max-content; padding: 4px 2px; }
+    .stack-col     { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .stack-bar     { width: 32px; border-radius: 4px 4px 0 0; transition: height 0.5s; }
+    .stack-lbl     { font-size: 11px; font-weight: 700; color: var(--muted); text-align: center; white-space: nowrap; }
+    .stack-total   { font-size: 12px; font-weight: 800; color: var(--text); }
+
+    /* Legend */
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+    .legend-item { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; }
+    .legend-dot  { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+    /* Table — scrollable wrapper prevents overflow on narrow phones */
+    .dash-table-wrap { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; touch-action: pan-x pinch-zoom; }
+    .dash-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 320px; }
+    .dash-table th {
+      background: var(--blue); color: #fff; padding: 9px 10px;
+      text-align: center; font-size: 12px; font-weight: 700; white-space: nowrap;
+    }
+    .dash-table th:first-child { text-align: left; border-radius: 6px 0 0 0; }
+    .dash-table th:last-child  { border-radius: 0 6px 0 0; }
+    .dash-table td { padding: 9px 10px; text-align: center; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+    .dash-table td:first-child { text-align: left; font-weight: 700; }
+    .dash-table tr:last-child td { border-bottom: none; }
+    .dash-table tr:nth-child(even) td { background: #fafafa; }
+
+    /* Donut / pie (CSS only) */
+    .donut-wrap { display: flex; align-items: center; gap: 14px; }
+    .donut      { position: relative; width: 90px; height: 90px; flex-shrink: 0; }
+    .donut svg  { transform: rotate(-90deg); }
+    .donut-center {
+      position: absolute; top:50%; left:50%; transform: translate(-50%,-50%);
+      text-align: center;
+    }
+    .donut-center .dc-val { font-size: 20px; font-weight: 800; color: var(--text); line-height:1; }
+    .donut-center .dc-lbl { font-size: 11px; color: var(--muted); font-weight:700; }
+    .donut-legend { flex: 1; }
+    .donut-legend .dl-row { display:flex; justify-content:space-between; align-items:center;
+                            padding: 7px 0; border-bottom: 1px solid #f5f5f5; }
+    .donut-legend .dl-row:last-child { border-bottom: none; }
+    .donut-legend .dl-name { font-size:14px; font-weight:700; display:flex; align-items:center; gap:6px; }
+    .donut-legend .dl-cnt  { font-size:15px; font-weight:800; }
+    .dl-dot { width:11px; height:11px; border-radius:50%; flex-shrink:0; }
+
+    /* ── SERVICE REPORT ──────────────────────────────────── */
+    .svc-kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+    .svc-kpi {
+      background:#fff; border-radius:var(--radius); box-shadow:var(--shadow);
+      padding:16px 12px; text-align:center;
+    }
+    .svc-kpi .sk-val { font-size:28px; font-weight:900; line-height:1; }
+    .svc-kpi .sk-lbl { font-size:12px; font-weight:700; text-transform:uppercase;
+                       letter-spacing:0.3px; margin-top:5px; color:var(--muted); }
+    .svc-kpi.sk-total { grid-column:span 2; background:linear-gradient(135deg,#1b5e20,#2e7d32); color:#fff; }
+    .svc-kpi.sk-total .sk-lbl { color:rgba(255,255,255,0.8); }
+    .svc-kpi.sk-pending   { border-top:3px solid #f57f17; color:#f57f17; }
+    .svc-kpi.sk-completed { border-top:3px solid #2e7d32; color:#2e7d32; }
+    .svc-kpi.sk-bill      { border-top:3px solid #1565c0; color:#1565c0; }
+    .svc-kpi.sk-paid      { border-top:3px solid #6a1b9a; color:#6a1b9a; }
+
+    .svc-card {
+      background:#fff; border-radius:var(--radius); box-shadow:var(--shadow);
+      padding:16px; margin-bottom:12px; border-left:4px solid var(--border);
+    }
+    .svc-card.sc-pending   { border-left-color:#f57f17; }
+    .svc-card.sc-completed { border-left-color:#2e7d32; }
+    .svc-name  { font-size:17px; font-weight:800; color:var(--text); }
+    .svc-row   { font-size:14px; color:var(--muted); margin-top:5px; line-height:1.5; }
+    .svc-row strong { color:var(--text); }
+    .svc-badge {
+      display:inline-block; padding:4px 12px; border-radius:20px;
+      font-size:13px; font-weight:700;
+    }
+    .sb-pending   { background:#fff3e0; color:#e65100; }
+    .sb-completed { background:#e8f5e9; color:#2e7d32; }
+    .sb-paid      { background:#e3f2fd; color:#1565c0; }
+    .sb-free      { background:#f3e5f5; color:#6a1b9a; }
+    .sb-breakdown { background:#ffebee; color:#c62828; }
+    .sb-warranty  { background:#e8f5e9; color:#1b5e20; }
+    .sb-nowarranty{ background:#ffebee; color:#b71c1c; }
+    .svc-amount-row {
+      display:flex; justify-content:space-between; align-items:center;
+      margin-top:10px; padding-top:10px; border-top:1px solid #f5f5f5;
+    }
+    .svc-amt { font-size:15px; font-weight:800; }
+    .svc-amt .am-lbl { font-size:12px; font-weight:600; color:var(--muted); display:block; }
+    .svc-filters-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    .svc-filters-row .field { flex:1; min-width:calc(50% - 4px); margin-bottom:6px; }
+
+    /* ── AUTO DOWNGRADE ──────────────────────────────────── */
+    .auto-kpi-strip {
+      display:flex; gap:10px; margin-bottom:14px;
+    }
+    .auto-kpi {
+      flex:1; background:#fff; border-radius:var(--radius);
+      box-shadow:var(--shadow); padding:16px 12px; text-align:center;
+    }
+    .auto-kpi .ak-val { font-size:30px; font-weight:900; line-height:1; }
+    .auto-kpi .ak-lbl { font-size:12px; font-weight:700; text-transform:uppercase;
+                        letter-spacing:0.3px; margin-top:5px; color:var(--muted); }
+    .auto-kpi.ak-hw   { border-top:3px solid #f57f17; color:#f57f17; }
+    .auto-kpi.ak-wc   { border-top:3px solid #1565c0; color:#1565c0; }
+    .auto-kpi.ak-tot  { border-top:3px solid #c62828; color:#c62828; }
+
+    .auto-toggle-btn {
+      width:100%; background:#fff3e0; color:#e65100;
+      border:1.5px solid #ffcc80; border-radius:12px;
+      padding:13px 16px; font-size:15px; font-weight:700;
+      cursor:pointer; text-align:left; display:flex;
+      justify-content:space-between; align-items:center;
+      margin-bottom:6px;
+    }
+    .auto-toggle-btn:active { opacity:0.85; }
+
+    .auto-record {
+      background:#fff; border-radius:10px; padding:11px 13px;
+      margin-bottom:8px; border-left:4px solid #f57f17;
+      box-shadow:0 1px 4px rgba(0,0,0,0.07);
+    }
+    .auto-record.wc { border-left-color:#1565c0; }
+    .auto-record-top {
+      display:flex; justify-content:space-between; align-items:flex-start;
+    }
+    .auto-record-name { font-size:14px; font-weight:800; color:var(--text); }
+    .auto-arrow {
+      font-size:12px; font-weight:800; padding:2px 8px;
+      border-radius:20px; white-space:nowrap;
+    }
+    .arrow-hw { background:#fff3e0; color:#e65100; }
+    .arrow-wc { background:#e3f2fd; color:#1565c0; }
+    .auto-record-meta { font-size:14px; color:var(--muted); margin-top:5px; line-height:1.5; }
+
+    /* ── ACTIVITY PHOTOS ─────────────────────────────────── */
+    .photo-upload-area {
+      border: 2px dashed var(--border); border-radius: 10px;
+      padding: 16px; text-align: center; background: #fafafa;
+      cursor: pointer; transition: border-color 0.2s;
+    }
+    .photo-upload-area:active { border-color: var(--blue); }
+    .photo-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 8px; margin-top: 10px;
+    }
+    .photo-thumb {
+      position: relative; aspect-ratio: 1;
+      border-radius: 8px; overflow: hidden;
+      background: #f0f0f0;
+    }
+    .photo-thumb img {
+      width: 100%; height: 100%; object-fit: cover;
+      display: block;
+    }
+    .photo-thumb .remove-btn {
+      position: absolute; top: 4px; right: 4px;
+      background: rgba(198,40,40,0.88); color: #fff;
+      border: none; border-radius: 50%;
+      width: 26px; height: 26px; font-size: 14px;
+      font-weight: 900; cursor: pointer; line-height: 26px;
+      text-align: center; padding: 0;
+    }
+    .photo-thumb .upload-status {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: rgba(0,0,0,0.55); color: #fff;
+      font-size: 12px; font-weight: 700; text-align: center;
+      padding: 4px 0;
+    }
+    .photo-thumb .upload-ok  { background: rgba(46,125,50,0.85); }
+    .photo-thumb .upload-err { background: rgba(198,40,40,0.85); }
+    .upload-progress-bar {
+      background: #eee; border-radius: 8px; height: 8px;
+      overflow: hidden; margin: 10px 0 6px;
+    }
+    .upload-progress-fill {
+      height: 100%; border-radius: 8px;
+      background: linear-gradient(90deg,var(--blue),var(--green));
+      transition: width 0.4s ease;
+    }
+    .photo-count-badge {
+      display: inline-block; background: var(--blue);
+      color: #fff; font-size: 13px; font-weight: 700;
+      padding: 3px 10px; border-radius: 10px; margin-left: 6px;
+    }
+
+    /* ── BILL APPROVAL ───────────────────────────────────── */
+    .bill-kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+    .bill-kpi {
+      background:#fff; border-radius:var(--radius); box-shadow:var(--shadow);
+      padding:18px 14px; text-align:center;
+    }
+    .bill-kpi .bk-val { font-size:28px; font-weight:900; line-height:1; }
+    .bill-kpi .bk-lbl { font-size:12px; font-weight:700; text-transform:uppercase;
+                        letter-spacing:0.3px; margin-top:5px; color:var(--muted); }
+    .bill-kpi.bk-total  { grid-column:span 2;
+                          background:linear-gradient(135deg,#e65100,#f57f17); color:#fff; }
+    .bill-kpi.bk-total .bk-lbl { color:rgba(255,255,255,0.85); }
+    .bill-kpi.bk-count  { border-top:3px solid var(--blue);  color:var(--blue);  }
+    .bill-kpi.bk-avg    { border-top:3px solid var(--green); color:var(--green); }
+
+    .bill-card {
+      background:#fff; border-radius:var(--radius); box-shadow:var(--shadow);
+      padding:16px; margin-bottom:12px;
+      border-left:4px solid #f57f17;
+    }
+    .bill-card-header {
+      display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;
+    }
+    .bill-name  { font-size:17px; font-weight:800; color:var(--text); }
+    .bill-amt   { font-size:18px; font-weight:900; color:#e65100; }
+    .bill-meta  { font-size:12px; color:var(--muted); margin-top:3px; }
+    .bill-img-btn {
+      display:inline-flex; align-items:center; gap:5px;
+      background:var(--blue-lt); color:var(--blue);
+      border:1.5px solid var(--blue); border-radius:8px;
+      padding:6px 12px; font-size:12px; font-weight:700;
+      text-decoration:none; margin-top:8px;
+      cursor:pointer;
+    }
+    .bill-img-btn:active { opacity:0.8; }
+    .bill-no-img {
+      display:inline-block; background:#f5f5f5; color:#bbb;
+      border-radius:8px; padding:6px 12px; font-size:12px;
+      margin-top:8px;
+    }
+    .salesman-bill-row {
+      display:flex; justify-content:space-between; align-items:center;
+      padding:11px 0; border-bottom:1px solid #f5f5f5;
+    }
+    .salesman-bill-row:last-child { border-bottom:none; }
+    .sbl-name  { font-size:15px; font-weight:700; }
+    .sbl-right { text-align:right; }
+    .sbl-amt   { font-size:16px; font-weight:800; color:#e65100; }
+    .sbl-cnt   { font-size:13px; color:var(--muted); margin-top:2px; }
+    .lock-screen {
+      display:flex; flex-direction:column; align-items:center;
+      justify-content:center; padding:48px 24px; text-align:center;
+    }
+
+    /* ── ATTENDANCE FILTERS — stack on mobile ────────────── */
+    .att-filters { flex-direction: column; gap: 0; }
+    .att-filters .field { margin-bottom: 12px; }
+
+    /* ── SERVICE FILTER ROW — stack ──────────────────────── */
+    .svc-filters-row { flex-direction: column; gap: 0; }
+    .svc-filters-row .field { min-width: 100%; margin-bottom: 12px; }
+
+    /* ── RESPONSIVE: very narrow phones (< 360px) ─────────── */
+    @media (max-width: 359px) {
+      .kpi-val          { font-size: 28px; }
+      .tab-btn          { min-width: 60px; font-size: 12px; }
+      .tab-btn .tab-icon{ font-size: 22px; }
+      .cb-group         { grid-template-columns: 1fr; }
+    }
+
+    /* Password input — big centered digits */
+    input[type="password"] {
+      text-align: center; letter-spacing: 8px;
+      font-size: 24px; min-height: 60px;
+    }
+
+    /* Minimum touch target */
+    .btn-primary   { min-height: 54px; }
+    .btn-secondary { min-height: 50px; }
+    .btn-edit      { min-height: 46px; }
+    .btn-refresh   { min-height: 44px; }
+    button, select { min-height: 44px; }
+
+  </style>
+</head>
+<body>
+
+<!-- ── PWA SPLASH SCREEN ──────────────────────────────────── -->
+<div id="pwa-splash">
+  <!-- Same SVG logo on white card -->
+  <div style="background:#fff;border-radius:24px;padding:24px 32px;box-shadow:0 8px 40px rgba(0,0,0,0.25);margin-bottom:28px">
+    <svg viewBox="0 0 260 100" width="220" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="50" cy="50" r="48" fill="#1a6b1a" stroke="#fff" stroke-width="2"/>
+      <circle cx="50" cy="28" r="10" fill="#f5a623"/>
+      <line x1="50" y1="10" x2="50" y2="16" stroke="#f5a623" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="32" y1="28" x2="36" y2="28" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
+      <line x1="64" y1="28" x2="68" y2="28" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
+      <line x1="37" y1="15" x2="40" y2="19" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
+      <line x1="63" y1="15" x2="60" y2="19" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
+      <ellipse cx="30" cy="68" rx="22" ry="12" fill="#2d8a2d"/>
+      <ellipse cx="70" cy="70" rx="20" ry="10" fill="#2d8a2d"/>
+      <ellipse cx="50" cy="72" rx="28" ry="9" fill="#34a034"/>
+      <rect x="28" y="56" width="26" height="14" rx="3" fill="#e8e8e8" stroke="#999" stroke-width="0.8"/>
+      <rect x="38" y="50" width="14" height="10" rx="2" fill="#d0d0d0" stroke="#aaa" stroke-width="0.8"/>
+      <circle cx="34" cy="72" r="7" fill="#555" stroke="#333" stroke-width="1"/>
+      <circle cx="34" cy="72" r="3.5" fill="#888"/>
+      <circle cx="50" cy="71" r="5.5" fill="#555" stroke="#333" stroke-width="1"/>
+      <circle cx="50" cy="71" r="2.5" fill="#888"/>
+      <rect x="42" y="45" width="3" height="6" rx="1" fill="#888"/>
+      <text x="110" y="42" font-family="Arial Black,Arial" font-weight="900" font-size="36" fill="#c62828" letter-spacing="-1">R</text>
+      <text x="136" y="42" font-family="Arial Black,Arial" font-weight="900" font-size="36" fill="#1565c0">K</text>
+      <text x="162" y="42" font-family="Arial Black,Arial" font-weight="900" font-size="36" fill="#e65100">T</text>
+      <path d="M104 52 Q182 48 258 54 Q258 72 258 72 Q182 76 104 72 Z" fill="#1a6b1a"/>
+      <text x="181" y="68" font-family="Arial Black,Arial" font-weight="900" font-size="16" fill="#fff" text-anchor="middle" letter-spacing="2">MOTORS</text>
+      <path d="M104 74 Q181 80 258 76" stroke="#e65100" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <div class="splash-sub" style="color:rgba(255,255,255,0.9);font-size:15px;font-weight:700">Daily CRM System</div>
+  <div class="splash-dots" style="margin-top:28px">
+    <div class="splash-dot"></div>
+    <div class="splash-dot"></div>
+    <div class="splash-dot"></div>
+  </div>
+</div>
+
+<!-- ── ANDROID INSTALL BANNER ─────────────────────────────── -->
+<div id="pwa-install-banner">
+  <div class="install-icon">RKT</div>
+  <div class="install-text">
+    <strong>Install RKT CRM App</strong>
+    <span>Add to home screen for quick access</span>
+  </div>
+  <div class="install-actions">
+    <button class="btn-install" onclick="installPWA()">Install</button>
+    <button class="btn-install-dismiss" onclick="dismissInstall()">✕</button>
+  </div>
+</div>
+
+<!-- ── ANDROID INSTALL GUIDE ──────────────────────────────── -->
+<div id="android-install-guide">
+  <div class="ios-guide-title">📲 Install RKT CRM on Android</div>
+  <div class="ios-step">
+    <div class="ios-step-icon">⋮</div>
+    <div class="ios-step-text">Tap the <strong>3-dot menu</strong> (⋮) at the top-right of Chrome</div>
+  </div>
+  <div class="ios-step">
+    <div class="ios-step-icon">➕</div>
+    <div class="ios-step-text">Tap <strong>"Add to Home screen"</strong></div>
+  </div>
+  <div class="ios-step">
+    <div class="ios-step-icon">✅</div>
+    <div class="ios-step-text">Tap <strong>"Add"</strong> — RKT CRM icon will appear on your home screen!</div>
+  </div>
+  <button class="btn-primary" onclick="document.getElementById('android-install-guide').classList.remove('show')"
+          style="margin-top:4px">Got it!</button>
+</div>
+
+<!-- ── iOS INSTALL GUIDE ───────────────────────────────────── -->
+<div id="ios-install-guide">
+  <div class="ios-guide-title">📲 Install RKT CRM on your iPhone</div>
+  <div class="ios-step">
+    <div class="ios-step-icon">⬆️</div>
+    <div class="ios-step-text">Tap the <strong>Share</strong> button at the bottom of Safari</div>
+  </div>
+  <div class="ios-step">
+    <div class="ios-step-icon">➕</div>
+    <div class="ios-step-text">Scroll down and tap <strong>"Add to Home Screen"</strong></div>
+  </div>
+  <div class="ios-step">
+    <div class="ios-step-icon">✅</div>
+    <div class="ios-step-text">Tap <strong>"Add"</strong> — RKT CRM will appear on your home screen!</div>
+  </div>
+  <button class="btn-primary" onclick="document.getElementById('ios-install-guide').classList.remove('show')"
+          style="margin-top:4px">Got it!</button>
+</div>
+
+<div id="app">
+
+  <!-- ── HEADER ──────────────────────────────────────────── -->
+  <div class="app-header">
+    <!-- RKT Motors Logo SVG (recreated from brand) -->
+    <svg class="logo-img" viewBox="0 0 260 100" xmlns="http://www.w3.org/2000/svg">
+      <!-- Circle emblem -->
+      <circle cx="50" cy="50" r="48" fill="#1a6b1a" stroke="#fff" stroke-width="2"/>
+      <!-- Sun rays -->
+      <circle cx="50" cy="28" r="10" fill="#f5a623"/>
+      <line x1="50" y1="10" x2="50" y2="16" stroke="#f5a623" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="50" y1="40" x2="50" y2="46" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
+      <line x1="32" y1="28" x2="36" y2="28" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
+      <line x1="64" y1="28" x2="68" y2="28" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
+      <line x1="37" y1="15" x2="40" y2="19" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
+      <line x1="60" y1="37" x2="63" y2="41" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
+      <line x1="63" y1="15" x2="60" y2="19" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
+      <line x1="37" y1="37" x2="40" y2="41" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
+      <!-- Hills -->
+      <ellipse cx="30" cy="68" rx="22" ry="12" fill="#2d8a2d"/>
+      <ellipse cx="70" cy="70" rx="20" ry="10" fill="#2d8a2d"/>
+      <ellipse cx="50" cy="72" rx="28" ry="9" fill="#34a034"/>
+      <!-- Tractor body -->
+      <rect x="28" y="56" width="26" height="14" rx="3" fill="#e8e8e8" stroke="#999" stroke-width="0.8"/>
+      <rect x="38" y="50" width="14" height="10" rx="2" fill="#d0d0d0" stroke="#aaa" stroke-width="0.8"/>
+      <!-- Tractor wheels -->
+      <circle cx="34" cy="72" r="7" fill="#555" stroke="#333" stroke-width="1"/>
+      <circle cx="34" cy="72" r="3.5" fill="#888"/>
+      <circle cx="50" cy="71" r="5.5" fill="#555" stroke="#333" stroke-width="1"/>
+      <circle cx="50" cy="71" r="2.5" fill="#888"/>
+      <!-- Exhaust -->
+      <rect x="42" y="45" width="3" height="6" rx="1" fill="#888"/>
+      <!-- Outer ring highlight -->
+      <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="2"/>
+      <!-- RKT text -->
+      <text x="110" y="42" font-family="Arial Black,Arial" font-weight="900" font-size="36" fill="#c62828" letter-spacing="-1">R</text>
+      <text x="136" y="42" font-family="Arial Black,Arial" font-weight="900" font-size="36" fill="#1565c0">K</text>
+      <text x="162" y="42" font-family="Arial Black,Arial" font-weight="900" font-size="36" fill="#e65100">T</text>
+      <!-- MOTORS banner -->
+      <path d="M104 52 Q182 48 258 54 Q258 72 258 72 Q182 76 104 72 Z" fill="#1a6b1a"/>
+      <text x="181" y="68" font-family="Arial Black,Arial" font-weight="900" font-size="16" fill="#fff" text-anchor="middle" letter-spacing="2">MOTORS</text>
+      <!-- Swash line -->
+      <path d="M104 74 Q181 80 258 76" stroke="#e65100" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    </svg>
+
+    <div class="header-text">
+      <h1>RKT MOTORS</h1>
+      <p>Daily CRM System</p>
+    </div>
+    <div class="header-right">
+      <button id="installAppBtn" onclick="triggerInstall()" title="Install App">📲 Install</button>
+      <button id="newEntryBtn"   onclick="newEntry()">✚ New</button>
+    </div>
+  </div>
+
+  <!-- ── TAB BAR ─────────────────────────────────────────── -->
+  <div class="tab-bar">
+    <button id="tab-daily"      class="tab-btn active"   onclick="showTab('daily')">
+      <span class="tab-icon">📋</span>Daily
+    </button>
+    <button id="tab-search"     class="tab-btn"          onclick="showTab('search')">
+      <span class="tab-icon">🔍</span>Search
+    </button>
+    <button id="tab-attendance" class="tab-btn"          onclick="showTab('attendance')">
+      <span class="tab-icon">🗓️</span>Attend
+    </button>
+    <button id="tab-petrol"     class="tab-btn"          onclick="showTab('petrol')">
+      <span class="tab-icon">⛽</span>Petrol
+    </button>
+    <button id="tab-dashboard" class="tab-btn"          onclick="showTab('dashboard')">
+      <span class="tab-icon">📊</span>Stats
+    </button>
+    <button id="tab-service"   class="tab-btn"          onclick="showTab('service')">
+      <span class="tab-icon">🔧</span>Service
+    </button>
+    <button id="tab-bills"     class="tab-btn"          onclick="showTab('bills')">
+      <span class="tab-icon">🧾</span>Bills
+    </button>
+  </div>
+
+  <!-- ── SCROLLABLE AREA ─────────────────────────────────── -->
+  <div class="tab-content">
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!--  DAILY REPORT                                        -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-daily" class="section active">
+
+      <div class="quote-box" id="quoteBox"></div>
+
+      <!-- AUTO STATUS ALERT -->
+      <div id="autoStatusAlert" class="banner banner-orange">
+        <div class="banner-title" id="autoAlertTitle"></div>
+        <div class="banner-body"  id="autoAlertBody"></div>
+      </div>
+
+      <!-- CUSTOMER FOUND BANNER -->
+      <div id="customerFound" class="banner banner-green"></div>
+
+      <div class="card">
+        <div class="card-title">👤 Sales Info</div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Salesman</label>
+            <select id="salesman">
+              <option value="">Select</option>
+              <option>Abhishek</option>
+              <option>Shivdayal</option>
+              <option>Roduram</option>
+              <option>Hemraj</option>
+              <option>Sahil</option>
+              <option>Giriraj</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Activity Type</label>
+            <select id="activityType" onchange="toggleFields()">
+              <option value="">Select</option>
+              <option>Field</option>
+              <option>Demo</option>
+              <option>Display</option>
+              <option>Calling</option>
+              <option>Office Work</option>
+              <option>Showroom</option>
+              <option>Tractor Service-At Field</option>
+              <option>Tractor Service-At Showroom</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="showroomNotice" class="notice">
+          कृपया आज शोरूम में किए गए कार्य की जानकारी लिखें ताकि आपकी उपस्थिति दर्ज हो सके।
+        </div>
+      </div>
+
+      <!-- ── SALES FIELDS ──────────────────────────────── -->
+      <div id="salesFields">
+        <div class="card">
+          <div class="card-title">📞 Customer Details</div>
+
+          <div class="field">
+            <label>Mobile Number</label>
+            <input type="tel" id="mobile" maxlength="10"
+                   placeholder="10 digit mobile number"
+                   inputmode="numeric"
+                   oninput="this.value=this.value.replace(/\D/g,''); validateMobile(); checkCustomer();">
+            <div id="mobileError" class="field-error">Please enter a valid 10-digit number</div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Customer Name</label>
+              <input type="text" id="customerName">
+            </div>
+            <div class="field">
+              <label>Age</label>
+              <input type="number" id="age" placeholder="Years">
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Village Name</label>
+            <input type="text" id="village">
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Enquiry Status</label>
+              <select id="enquiryType">
+                <option value="">Select</option>
+                <option>Hot</option>
+                <option>Warm</option>
+                <option>Cold</option>
+                <option>Contacted</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Swaraj Dealer Known</label>
+              <select id="swarajDealer">
+                <option value="">Select</option>
+                <option>Yes</option>
+                <option>No</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Customer Type</label>
+            <div class="cb-group">
+              <label class="cb-item"><input type="checkbox" class="customerType" value="Farmer"> Farmer</label>
+              <label class="cb-item"><input type="checkbox" class="customerType" value="Progressive Farmer"> Prog. Farmer</label>
+              <label class="cb-item"><input type="checkbox" class="customerType" value="Sarpanch"> Sarpanch</label>
+              <label class="cb-item"><input type="checkbox" class="customerType" value="Gram Sevak"> Gram Sevak</label>
+              <label class="cb-item"><input type="checkbox" class="customerType" value="Influencer"> Influencer</label>
+              <label class="cb-item"><input type="checkbox" class="customerType" value="Dairy Booth"> Dairy Booth</label>
+              <label class="cb-item"><input type="checkbox" class="customerType" value="Mechanic"> Mechanic</label>
+              <label class="cb-item"><input type="checkbox" class="customerType" value="Shopkeeper"> Shopkeeper</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🚜 Tractor Details</div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Model Required</label>
+              <input type="text" id="model" placeholder="e.g. 735 FE">
+            </div>
+            <div class="field">
+              <label>Rate (New)</label>
+              <input type="number" id="rate" placeholder="₹">
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Exchange Details</label>
+              <input type="text" id="exchange">
+            </div>
+            <div class="field">
+              <label>Old Demand</label>
+              <input type="text" id="oldDemand">
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Tractor Usage</label>
+            <div class="cb-group">
+              <label class="cb-item"><input type="checkbox" class="usage" value="Agriculture"> Agriculture</label>
+              <label class="cb-item"><input type="checkbox" class="usage" value="Haullage"> Haullage</label>
+              <label class="cb-item"><input type="checkbox" class="usage" value="Rental"> Rental</label>
+              <label class="cb-item"><input type="checkbox" class="usage" value="Heavy Implements(Thresher)"> Heavy Implements</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Preferred Brand</label>
+            <div class="cb-group">
+              <label class="cb-item"><input type="checkbox" class="brand" value="Massey"> Massey</label>
+              <label class="cb-item"><input type="checkbox" class="brand" value="Swaraj"> Swaraj</label>
+              <label class="cb-item"><input type="checkbox" class="brand" value="Farmtrac"> Farmtrac</label>
+              <label class="cb-item"><input type="checkbox" class="brand" value="Mahindra"> Mahindra</label>
+              <label class="cb-item"><input type="checkbox" class="brand" value="Sonalika"> Sonalika</label>
+              <label class="cb-item"><input type="checkbox" class="brand" value="Powertrac"> Powertrac</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">📝 Additional Info</div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Decision Maker</label>
+              <input type="text" id="decisionMaker" placeholder="Who decides?">
+            </div>
+            <div class="field">
+              <label>Land Holding</label>
+              <input type="text" id="land" placeholder="e.g. 3 biga">
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- /salesFields -->
+
+      <!-- ── SERVICE FIELDS ────────────────────────────── -->
+      <div id="serviceFields" class="hidden">
+        <div class="card">
+          <div class="card-title">🔧 Service Details</div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Service Type</label>
+              <select id="serviceType">
+                <option value="">Select</option>
+                <option>Paid</option><option>Free</option><option>Breakdown</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Service Status</label>
+              <select id="serviceStatus">
+                <option value="">Select</option>
+                <option>Pending</option><option>Completed</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Service Complaint</label>
+            <textarea id="serviceComplaint"></textarea>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Mechanic</label>
+              <select id="mechanicName">
+                <option value="">Select</option>
+                <option>Sahil</option><option>Giriraj</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Warranty</label>
+              <select id="warranty">
+                <option value="">Select</option>
+                <option>In Warranty</option><option>Out of Warranty</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Service Date</label>
+              <input type="date" id="serviceDate">
+            </div>
+            <div class="field">
+              <label>Model Serviced</label>
+              <input type="text" id="serviceModel">
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Chasis No.</label>
+              <input type="text" id="chasis">
+            </div>
+            <div class="field">
+              <label>Tractor Hours</label>
+              <input type="number" id="hours">
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Bill Amount</label>
+              <input type="number" id="bill" placeholder="₹">
+            </div>
+            <div class="field">
+              <label>Net Payment</label>
+              <input type="number" id="payment" placeholder="₹">
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- /serviceFields -->
+
+      <!-- ── REMARKS ────────────────────────────────────── -->
+      <div class="card">
+        <div class="card-title">💬 Remarks</div>
+        <div class="field">
+          <label>Previous Remarks</label>
+          <textarea id="oldRemarks" readonly style="background:#f8f8f8;color:#666;min-height:70px;"
+                    placeholder="No previous remarks"></textarea>
+        </div>
+        <div class="field">
+          <label>New Remark</label>
+          <textarea id="newRemark" placeholder="Today's update..."></textarea>
+        </div>
+      </div>
+
+      <!-- ── ACTIVITY PHOTOS ──────────────────────────────── -->
+      <div class="card" id="activityPhotoCard">
+        <div class="card-title">
+          📷 Activity Photos
+          <span class="photo-count-badge" id="photoCountBadge" style="display:none">0</span>
+          <span style="font-size:13px;color:var(--muted);font-weight:500;margin-left:auto">
+            Max 10 photos
+          </span>
+        </div>
+
+        <!-- Tap-to-select strip -->
+        <div class="photo-upload-area" id="photoUploadArea"
+             onclick="document.getElementById('activityPhotoInput').click()"
+             style="padding:12px">
+          <div id="photoUploadPlaceholder">
+            <div style="font-size:28px">📸</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:4px;font-weight:600">
+              Tap to add field visit photos
+            </div>
+            <div style="font-size:13px;color:#bbb;margin-top:2px">JPG / PNG • Max 10</div>
+          </div>
+        </div>
+        <input type="file" id="activityPhotoInput" accept="image/*" multiple
+               style="display:none" onchange="handleActivityPhotos(this)">
+
+        <!-- Add more button (shown once photos exist) -->
+        <div id="photoAddMoreWrap" style="display:none;margin-top:8px">
+          <button class="btn-secondary" style="font-size:12px;padding:8px"
+                  onclick="document.getElementById('activityPhotoInput').click()">
+            ➕ Add More Photos
+          </button>
+        </div>
+
+        <!-- Preview grid (outside upload-area so click doesn't retrigger) -->
+        <div class="photo-grid" id="photoPreviewGrid" style="margin-top:10px"></div>
+
+        <!-- Upload progress -->
+        <div id="photoUploadProgress" style="display:none;margin-top:8px">
+          <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px"
+               id="photoUploadStatus">Uploading...</div>
+          <div class="upload-progress-bar">
+            <div class="upload-progress-fill" id="photoProgressFill" style="width:0%"></div>
+          </div>
+        </div>
+
+        <!-- Upload button -->
+        <div id="photoUploadBtnWrap" style="display:none;margin-top:10px">
+          <button class="btn-primary" id="photoUploadBtn"
+                  onclick="uploadActivityPhotos()"
+                  style="background:linear-gradient(135deg,#1b5e20,#2e7d32)">
+            📤 Upload Photos to Drive
+          </button>
+        </div>
+
+        <!-- Uploaded links -->
+        <div id="photoUploadedLinks" style="margin-top:10px"></div>
+      </div>
+
+      <!-- Hidden state -->
+      <input type="hidden" id="rowNumber">
+      <input type="hidden" id="editMode" value="N">
+
+      <button class="btn-primary" id="submitBtn" onclick="submitForm()">
+        💾 Save Customer
+      </button>
+
+    </div><!-- /section-daily -->
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!--  SEARCH INQUIRY                                      -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-search" class="section">
+      <div class="card">
+        <div class="card-title">🔍 Search Inquiry</div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Salesman</label>
+            <select id="searchSalesman">
+              <option value="All">All</option>
+              <option>Abhishek</option><option>Shivdayal</option>
+              <option>Roduram</option><option>Hemraj</option>
+              <option>Sahil</option><option>Giriraj</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select id="searchStatus">
+              <option value="All">All</option>
+              <option>Hot</option><option>Warm</option>
+              <option>Cold</option><option>Contacted</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Search</label>
+          <input type="text" id="searchInput" placeholder="Mobile / Name / Village">
+        </div>
+
+        <button class="btn-primary" onclick="runSearch()">🔍 Search</button>
+      </div>
+
+      <div id="searchResults"></div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!--  ATTENDANCE                                          -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-attendance" class="section">
+      <div class="card">
+        <div class="card-title">🗓️ Attendance</div>
+
+        <div class="att-filters">
+          <div class="field">
+            <label>Month</label>
+            <select id="attMonth">
+              <option value="1">Jan</option><option value="2">Feb</option>
+              <option value="3">Mar</option><option value="4">Apr</option>
+              <option value="5">May</option><option value="6">Jun</option>
+              <option value="7">Jul</option><option value="8">Aug</option>
+              <option value="9">Sep</option><option value="10">Oct</option>
+              <option value="11">Nov</option><option value="12">Dec</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Year</label>
+            <select id="attYear"></select>
+          </div>
+          <div class="field">
+            <label>Member</label>
+            <select id="attSalesman">
+              <option value="All">All</option>
+              <option>Abhishek</option><option>Shivdayal</option>
+              <option>Roduram</option><option>Hemraj</option>
+              <option>Sahil</option><option>Giriraj</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="btn-primary" onclick="loadAttendance()">📊 Load Attendance</button>
+      </div>
+
+      <div id="attResults"></div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!--  PETROL BILL                                         -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-petrol" class="section">
+      <div class="card">
+        <div class="card-title">⛽ Upload Petrol Bill</div>
+
+        <div class="field">
+          <label>Team Member</label>
+          <select id="petrolSalesman">
+            <option value="">Select Member</option>
+            <option>Abhishek sir</option>
+            <option>Shivdayal</option>
+            <option>Roduram</option>
+            <option>Hemraj</option>
+            <option>Giriraj</option>
+            <option>Sahil</option>
+            <option>Shrwan</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Amount (₹)</label>
+          <input type="number" id="petrolAmount" placeholder="Enter amount in ₹" inputmode="numeric">
+        </div>
+
+        <div class="field">
+          <label>Bill Image</label>
+          <div id="petrolUploadArea" style="
+            border: 2px dashed var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            background: #fafafa;
+            cursor: pointer;
+          " onclick="document.getElementById('petrolImageInput').click()">
+            <div id="petrolUploadPlaceholder">
+              <div style="font-size:32px">📷</div>
+              <div style="font-size:13px;color:var(--muted);margin-top:6px">Tap to select bill image</div>
+              <div style="font-size:13px;color:#bbb;margin-top:3px">JPG / PNG supported</div>
+            </div>
+            <img id="petrolPreview" style="display:none;max-width:100%;border-radius:8px;margin-top:8px">
+            <div id="petrolFileName" style="font-size:12px;color:var(--muted);margin-top:6px;display:none"></div>
+          </div>
+          <input type="file" id="petrolImageInput" accept="image/*" capture="environment"
+                 style="display:none" onchange="handlePetrolImage(this)">
+        </div>
+
+        <div id="petrolBanner" class="banner" style="margin-top:10px"></div>
+
+        <button class="btn-primary" id="petrolSubmitBtn" onclick="submitPetrolBill()" style="margin-top:8px">
+          ⛽ Save Petrol Bill
+        </button>
+      </div>
+    </div><!-- /section-petrol -->
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!--  DASHBOARD                                           -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-dashboard" class="section">
+
+      <!-- Filter Card -->
+      <div class="card" style="padding:12px;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:10px">🔽 Filters</div>
+        <div class="field-row">
+          <div class="field">
+            <label>Year</label>
+            <select id="dfYear"><option value="0">All Years</option></select>
+          </div>
+          <div class="field">
+            <label>Month</label>
+            <select id="dfMonth">
+              <option value="0">All Months</option>
+              <option value="1">Jan</option><option value="2">Feb</option>
+              <option value="3">Mar</option><option value="4">Apr</option>
+              <option value="5">May</option><option value="6">Jun</option>
+              <option value="7">Jul</option><option value="8">Aug</option>
+              <option value="9">Sep</option><option value="10">Oct</option>
+              <option value="11">Nov</option><option value="12">Dec</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Salesman</label>
+            <select id="dfSalesman">
+              <option value="All">All</option>
+              <option>Abhishek</option><option>Shivdayal</option>
+              <option>Roduram</option><option>Hemraj</option>
+              <option>Sahil</option><option>Giriraj</option><option>Shrwan</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Activity</label>
+            <select id="dfActivity"><option value="">All Activities</option></select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Village</label>
+          <select id="dfVillage"><option value="">All Villages</option></select>
+        </div>
+        <div class="dash-refresh" style="margin-bottom:0;margin-top:4px">
+          <span id="dashGenAt" style="font-size:13px;color:var(--muted)">Not loaded yet</span>
+          <button class="btn-refresh" onclick="loadDashboard()">🔄 Apply &amp; Refresh</button>
+        </div>
+      </div>
+
+      <div id="dashContent">
+        <div class="spinner">📊 Tap "Apply &amp; Refresh" to load dashboard</div>
+      </div>
+
+      <!-- Auto Downgrade Panel -->
+      <div id="autoDowngradePanel" style="display:none;margin-top:4px">
+        <div class="dash-section-title">🔴 Auto Status Downgrades — Last 3 Months</div>
+
+        <!-- KPI strip -->
+        <div class="auto-kpi-strip">
+          <div class="auto-kpi ak-tot">
+            <div class="ak-val" id="adTotal">0</div>
+            <div class="ak-lbl">Total</div>
+          </div>
+          <div class="auto-kpi ak-hw">
+            <div class="ak-val" id="adHW">0</div>
+            <div class="ak-lbl">Hot→Warm</div>
+          </div>
+          <div class="auto-kpi ak-wc">
+            <div class="ak-val" id="adWC">0</div>
+            <div class="ak-lbl">Warm→Cold</div>
+          </div>
+        </div>
+
+        <!-- Hot→Warm toggle -->
+        <button class="auto-toggle-btn" id="adHWBtn" onclick="toggleAutoList('HW')"
+                style="display:none">
+          <span>🟡 Hot → Warm List</span>
+          <span id="adHWArrow">▼</span>
+        </button>
+        <div id="adHWList" style="display:none"></div>
+
+        <!-- Warm→Cold toggle -->
+        <button class="auto-toggle-btn" id="adWCBtn" onclick="toggleAutoList('WC')"
+                style="border-color:#90caf9;background:#e3f2fd;color:#1565c0;display:none">
+          <span>🔵 Warm → Cold List</span>
+          <span id="adWCArrow">▼</span>
+        </button>
+        <div id="adWCList" style="display:none"></div>
+
+        <div id="adLoading" class="spinner" style="display:none">⏳ Loading...</div>
+      </div>
+
+      <!-- Drill-down records panel -->
+      <div id="dashDrillPanel" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 8px">
+          <div id="drillTitle" style="font-size:14px;font-weight:800;color:var(--blue)"></div>
+          <button onclick="closeDrill()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+        </div>
+        <div id="drillDownload" style="display:none;margin-bottom:8px">
+          <button class="btn-secondary" onclick="downloadCSV()" style="font-size:13px;padding:10px">
+            📥 Download Excel (CSV)
+          </button>
+        </div>
+        <div id="drillContent"></div>
+      </div>
+
+    </div><!-- /section-dashboard -->
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!--  SERVICE REPORT                                      -->
+    <!-- ════════════════════════════════════════════════════ -->
+
+    <div id="section-service" class="section">
+
+      <!-- ── PASSWORD LOCK ──────────────────────────────── -->
+      <div id="svcLockScreen">
+        <div style="
+          display:flex; flex-direction:column; align-items:center;
+          justify-content:center; padding:40px 20px; text-align:center;
+        ">
+          <div style="
+            width:72px; height:72px; border-radius:50%;
+            background:linear-gradient(135deg,var(--red),var(--blue));
+            display:flex; align-items:center; justify-content:center;
+            font-size:32px; margin-bottom:20px;
+            box-shadow:0 4px 16px rgba(0,0,0,0.18);
+          ">🔒</div>
+          <div style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:6px">
+            Service Report
+          </div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:24px">
+            This section is password protected.<br>Enter password to continue.
+          </div>
+
+          <div style="width:100%;max-width:300px">
+            <div class="field" style="margin-bottom:10px;position:relative">
+              <input type="password" id="svcPasswordInput"
+                     placeholder="Enter password"
+                     maxlength="20"
+                     style="text-align:center;font-size:20px;letter-spacing:6px;padding:14px;"
+                     onkeydown="if(event.key==='Enter') checkServicePassword()">
+              <span onclick="toggleSvcPwd()" style="
+                position:absolute;right:14px;top:50%;transform:translateY(-50%);
+                cursor:pointer;font-size:18px;user-select:none;
+              " id="svcPwdEye">👁️</span>
+            </div>
+            <div id="svcPwdError" style="
+              color:var(--red);font-size:13px;font-weight:700;
+              margin-bottom:10px;display:none;
+            ">❌ Incorrect password. Try again.</div>
+            <button class="btn-primary" onclick="checkServicePassword()">
+              🔓 Unlock
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SERVICE CONTENT (hidden until unlocked) ──────── -->
+      <div id="svcContent" style="display:none">
+
+      <!-- Filters -->
+      <div class="card" style="padding:12px;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:10px">🔧 Service Report Filters</div>
+
+        <div class="svc-filters-row">
+          <div class="field">
+            <label>Year</label>
+            <select id="svcYear">
+              <option value="0">All Years</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Month</label>
+            <select id="svcMonth">
+              <option value="0">All Months</option>
+              <option value="1">Jan</option><option value="2">Feb</option>
+              <option value="3">Mar</option><option value="4">Apr</option>
+              <option value="5">May</option><option value="6">Jun</option>
+              <option value="7">Jul</option><option value="8">Aug</option>
+              <option value="9">Sep</option><option value="10">Oct</option>
+              <option value="11">Nov</option><option value="12">Dec</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Mechanic</label>
+            <select id="svcMechanic">
+              <option value="All">All Mechanics</option>
+              <option>Sahil</option>
+              <option>Giriraj</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Service Status</label>
+            <select id="svcStatus">
+              <option value="All">All Status</option>
+              <option>Pending</option>
+              <option>Completed</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Service Type</label>
+            <select id="svcType">
+              <option value="All">All Types</option>
+              <option>Paid</option>
+              <option>Free</option>
+              <option>Breakdown</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px">
+          <button class="btn-primary" onclick="loadServiceReport()" style="flex:2">
+            🔍 Load Report
+          </button>
+          <button class="btn-secondary" id="svcDownloadBtn"
+                  onclick="downloadServiceCSV()" style="flex:1;display:none">
+            📥 Export
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Summary -->
+      <div id="svcKpiArea" style="display:none">
+        <div class="svc-kpi-grid">
+          <div class="svc-kpi sk-total">
+            <div class="sk-val" id="svcTotalCount">0</div>
+            <div class="sk-lbl">Total Services</div>
+          </div>
+          <div class="svc-kpi sk-pending">
+            <div class="sk-val" id="svcPendingCount">0</div>
+            <div class="sk-lbl">⏳ Pending</div>
+          </div>
+          <div class="svc-kpi sk-completed">
+            <div class="sk-val" id="svcCompletedCount">0</div>
+            <div class="sk-lbl">✅ Completed</div>
+          </div>
+          <div class="svc-kpi sk-bill">
+            <div class="sk-val" id="svcTotalBill">₹0</div>
+            <div class="sk-lbl">Total Bill</div>
+          </div>
+          <div class="svc-kpi sk-paid">
+            <div class="sk-val" id="svcTotalPaid">₹0</div>
+            <div class="sk-lbl">Net Collected</div>
+          </div>
+        </div>
+
+        <!-- Mechanic workload mini-bars -->
+        <div class="card" style="padding:13px;margin-bottom:12px" id="svcMechanicBars"></div>
+      </div>
+
+      <!-- Records -->
+      <div id="svcResults">
+        <div class="spinner">🔧 Select filters and tap "Load Report"</div>
+      </div>
+
+      </div><!-- /svcContent -->
+    </div><!-- /section-service -->
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!--  BILL APPROVAL                                       -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-bills" class="section">
+
+      <!-- PASSWORD LOCK -->
+      <div id="billLockScreen">
+        <div class="lock-screen">
+          <div style="
+            width:72px; height:72px; border-radius:50%;
+            background:linear-gradient(135deg,#e65100,#f57f17);
+            display:flex; align-items:center; justify-content:center;
+            font-size:32px; margin-bottom:20px;
+            box-shadow:0 4px 16px rgba(0,0,0,0.18);
+          ">🧾</div>
+          <div style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:6px">
+            Bill Approval
+          </div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:24px">
+            This section is password protected.<br>Enter password to continue.
+          </div>
+          <div style="width:100%;max-width:300px">
+            <div class="field" style="margin-bottom:10px;position:relative">
+              <input type="password" id="billPasswordInput"
+                     placeholder="Enter password"
+                     maxlength="20"
+                     style="text-align:center;font-size:20px;letter-spacing:6px;padding:14px;"
+                     onkeydown="if(event.key==='Enter') checkBillPassword()">
+              <span onclick="toggleBillPwd()" style="
+                position:absolute;right:14px;top:50%;transform:translateY(-50%);
+                cursor:pointer;font-size:18px;user-select:none;
+              " id="billPwdEye">👁️</span>
+            </div>
+            <div id="billPwdError" style="
+              color:var(--red);font-size:13px;font-weight:700;
+              margin-bottom:10px;display:none;
+            ">❌ Incorrect password. Try again.</div>
+            <button class="btn-primary" onclick="checkBillPassword()"
+                    style="background:linear-gradient(135deg,#e65100,#f57f17)">
+              🔓 Unlock
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- BILL CONTENT (hidden until unlocked) -->
+      <div id="billContent" style="display:none">
+
+        <!-- Filters -->
+        <div class="card" style="padding:12px;margin-bottom:10px">
+          <div class="card-title" style="margin-bottom:10px">🧾 Petrol Bill Filters</div>
+          <div class="field-row">
+            <div class="field">
+              <label>Year</label>
+              <select id="billYear"><option value="0">All Years</option></select>
+            </div>
+            <div class="field">
+              <label>Month</label>
+              <select id="billMonth">
+                <option value="0">All Months</option>
+                <option value="1">Jan</option><option value="2">Feb</option>
+                <option value="3">Mar</option><option value="4">Apr</option>
+                <option value="5">May</option><option value="6">Jun</option>
+                <option value="7">Jul</option><option value="8">Aug</option>
+                <option value="9">Sep</option><option value="10">Oct</option>
+                <option value="11">Nov</option><option value="12">Dec</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Salesman</label>
+            <select id="billSalesman">
+              <option value="All">All Members</option>
+              <option>Abhishek sir</option><option>Shivdayal</option>
+              <option>Roduram</option><option>Hemraj</option>
+              <option>Giriraj</option><option>Sahil</option><option>Shrwan</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn-primary" onclick="loadBillReport()"
+                    style="flex:2;background:linear-gradient(135deg,#e65100,#f57f17)">
+              🔍 Load Bills
+            </button>
+            <button class="btn-secondary" id="billDownloadBtn"
+                    onclick="downloadBillCSV()"
+                    style="flex:1;display:none;border-color:#e65100;color:#e65100">
+              📥 Export
+            </button>
+          </div>
+        </div>
+
+        <!-- KPI Summary -->
+        <div id="billKpiArea" style="display:none">
+          <div class="bill-kpi-grid">
+            <div class="bill-kpi bk-total">
+              <div class="bk-val" id="billTotalAmt">₹0</div>
+              <div class="bk-lbl">Total Amount</div>
+            </div>
+            <div class="bill-kpi bk-count">
+              <div class="bk-val" id="billTotalCount">0</div>
+              <div class="bk-lbl">Bills Submitted</div>
+            </div>
+            <div class="bill-kpi bk-avg">
+              <div class="bk-val" id="billAvgAmt">₹0</div>
+              <div class="bk-lbl">Avg per Bill</div>
+            </div>
+          </div>
+
+          <!-- Salesman Breakup -->
+          <div class="card" style="padding:13px;margin-bottom:12px" id="billSalesmanBreakup"></div>
+
+          <!-- Monthly Breakup -->
+          <div class="card" style="padding:13px;margin-bottom:12px" id="billMonthlyBreakup"
+               style="display:none"></div>
+        </div>
+
+        <!-- Records List -->
+        <div id="billResults">
+          <div class="spinner">🧾 Select filters and tap "Load Bills"</div>
+        </div>
+
+      </div><!-- /billContent -->
+    </div><!-- /section-bills -->
+
+  </div><!-- /tab-content -->
+</div><!-- /app -->
+
+<script>
+// ════════════════════════════════════════════════════════════
+// PWA — SPLASH / INSTALL / OFFLINE
+// ════════════════════════════════════════════════════════════
+var deferredInstallPrompt = null;
+
+// ── Hide splash after page loads ──
+window.addEventListener("load", function() {
+  setTimeout(function() {
+    var splash = document.getElementById("pwa-splash");
+    if (splash) {
+      splash.classList.add("hidden");
+      setTimeout(function(){ splash.style.display = "none"; }, 550);
+    }
+  }, 1800);  // show splash for 1.8s
+});
+
+// ── Detect if already installed as PWA ──
+function isAppInstalled() {
+  return window.matchMedia("(display-mode: standalone)").matches ||
+         window.navigator.standalone === true;
+}
+
+// ── If already installed, hide the install button ──
+window.addEventListener("load", function() {
+  if (isAppInstalled()) {
+    var btn = document.getElementById("installAppBtn");
+    if (btn) btn.style.display = "none";
+  }
+});
+
+// ── Catch native Android prompt if it ever fires (bonus) ──
+window.addEventListener("beforeinstallprompt", function(e) {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+
+// ── Install button tapped ──
+function triggerInstall() {
+  var isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  var isAndroid = /android/i.test(navigator.userAgent);
+
+  if (deferredInstallPrompt) {
+    // Native Chrome prompt available — use it
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(function(result) {
+      if (result.outcome === "accepted") {
+        document.getElementById("installAppBtn").style.display = "none";
+        showToast("🎉 RKT CRM installed! Open from home screen.", 3000, "#2e7d32");
+      }
+      deferredInstallPrompt = null;
+    });
+  } else if (isIOS) {
+    document.getElementById("ios-install-guide").classList.add("show");
+  } else {
+    // Android (and others) — show manual guide
+    document.getElementById("android-install-guide").classList.add("show");
+  }
+}
+
+function installPWA() { triggerInstall(); }
+
+function dismissInstall() {
+  document.getElementById("pwa-install-banner").classList.remove("show");
+}
+
+// ── Online / Offline toast ──
+window.addEventListener("offline", function() {
+  showToast("📵 You are offline. Some features may not work.", 4000, "#e65100");
+});
+window.addEventListener("online", function() {
+  showToast("✅ Back online!", 2500, "#2e7d32");
+});
+
+// ── Toast notification helper ──
+function showToast(msg, duration, color) {
+  duration = duration || 2500;
+  color    = color    || "#212121";
+  var old  = document.getElementById("pwa-toast");
+  if (old) old.remove();
+
+  var toast       = document.createElement("div");
+  toast.id        = "pwa-toast";
+  toast.textContent = msg;
+  toast.style.cssText =
+    "position:fixed;bottom:calc(80px + env(safe-area-inset-bottom,0px));left:50%;" +
+    "transform:translateX(-50%);" +
+    "background:" + color + ";color:#fff;" +
+    "padding:10px 20px;border-radius:25px;font-size:13px;font-weight:700;" +
+    "box-shadow:0 4px 16px rgba(0,0,0,0.25);z-index:9998;" +
+    "white-space:nowrap;max-width:90vw;text-align:center;" +
+    "animation:toastIn 0.3s ease;";
+
+  if (!document.getElementById("toast-style")) {
+    var st = document.createElement("style");
+    st.id  = "toast-style";
+    st.textContent =
+      "@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(20px)}" +
+      "to{opacity:1;transform:translateX(-50%) translateY(0)}}";
+    document.head.appendChild(st);
+  }
+
+  document.body.appendChild(toast);
+  setTimeout(function() {
+    toast.style.opacity   = "0";
+    toast.style.transition= "opacity 0.4s";
+    setTimeout(function(){ if(toast.parentNode) toast.remove(); }, 400);
+  }, duration);
+}
+
+// ════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════
+var existingCustomer = false;
+
+var QUOTES = [
+  "हर किसान की सफलता हमारी जिम्मेदारी है।",
+  "आज की मेहनत कल की बड़ी बिक्री बनती है।",
+  "ग्राहक से अच्छा व्यवहार ही सबसे बड़ी मार्केटिंग है।",
+  "हर गांव में Swaraj की पहचान बनानी है।",
+  "सफलता रोज़ छोटे प्रयासों से बनती है।",
+  "आज का फॉलोअप कल की डिलीवरी है।",
+  "किसान का विश्वास ही हमारी सबसे बड़ी पूंजी है।"
+];
+
+// ════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════
+window.onload = function() {
+  // Quote
+  document.getElementById("quoteBox").textContent = QUOTES[new Date().getDate() % QUOTES.length];
+
+  // Attendance year dropdown
+  var yr = new Date().getFullYear();
+  var yrSel = document.getElementById("attYear");
+  for (var y = yr; y >= yr - 2; y--) {
+    var o = document.createElement("option");
+    o.value = y; o.text = y;
+    yrSel.appendChild(o);
+  }
+  document.getElementById("attMonth").value = new Date().getMonth() + 1;
+
+  // Welcome toast when running as installed PWA
+  if (window.matchMedia("(display-mode: standalone)").matches) {
+    showToast("👋 Welcome to RKT CRM!", 2500, "#1565c0");
+  }
+};
+
+// ════════════════════════════════════════════════════════════
+// TABS
+// ════════════════════════════════════════════════════════════
+function showTab(tab) {
+  ["daily","search","attendance","petrol","dashboard","service","bills"].forEach(function(t) {
+    document.getElementById("section-" + t).classList.toggle("active", t === tab);
+    document.getElementById("tab-" + t).classList.toggle("active", t === tab);
+  });
+  if (tab === "dashboard") loadFilterOptions();
+  if (tab === "bills") {
+    if (billUnlocked) {
+      document.getElementById("billLockScreen").style.display = "none";
+      document.getElementById("billContent").style.display    = "block";
+      initBillYears();
+    } else {
+      document.getElementById("billLockScreen").style.display = "block";
+      document.getElementById("billContent").style.display    = "none";
+      setTimeout(function(){ document.getElementById("billPasswordInput").focus(); }, 300);
+    }
+  }
+  if (tab === "service") {
+    if (svcUnlocked) {
+      document.getElementById("svcLockScreen").style.display = "none";
+      document.getElementById("svcContent").style.display    = "block";
+      initServiceYears();
+    } else {
+      document.getElementById("svcLockScreen").style.display = "block";
+      document.getElementById("svcContent").style.display    = "none";
+      setTimeout(function(){
+        document.getElementById("svcPasswordInput").focus();
+      }, 300);
+    }
+  }
+}
+
+var dashLoaded = false;
+
+// ════════════════════════════════════════════════════════════
+// ACTIVITY TYPE TOGGLE
+// ════════════════════════════════════════════════════════════
+function toggleFields() {
+  var v = document.getElementById("activityType").value;
+  var isService  = v === "Tractor Service-At Field" || v === "Tractor Service-At Showroom";
+  var isShowroom = v === "Showroom";
+  var isSales    = !isService && !isShowroom;
+
+  document.getElementById("salesFields").classList.toggle("hidden", !isSales);
+  document.getElementById("serviceFields").classList.toggle("hidden", !isService);
+  document.getElementById("showroomNotice").style.display = isShowroom ? "block" : "none";
+}
+
+// ════════════════════════════════════════════════════════════
+// MOBILE VALIDATION
+// ════════════════════════════════════════════════════════════
+function validateMobile() {
+  var v = document.getElementById("mobile").value;
+  document.getElementById("mobileError").style.display =
+    (v.length > 0 && v.length < 10) ? "block" : "none";
+}
+
+// ════════════════════════════════════════════════════════════
+// CHECK CUSTOMER
+// ════════════════════════════════════════════════════════════
+function checkCustomer() {
+  var mobile = document.getElementById("mobile").value;
+  if (mobile.length !== 10) return;
+
+  gasCall('findCustomerByMobile', { mobile: mobile }, function(res) {
+      if (res.found) {
+        existingCustomer = true;
+        fillCustomerFields(res);
+
+        document.getElementById("customerFound").style.display = "block";
+        document.getElementById("customerFound").innerHTML =
+          "<b>✅ Customer Found</b><br>" +
+          "Name: <b>" + (res.customerName||"") + "</b> &nbsp;|&nbsp; " +
+          "Village: " + (res.village||"") + "<br>" +
+          "Salesman: " + (res.salesman||"") + " &nbsp;|&nbsp; Status: <b>" + (res.enquiryType||"") + "</b>";
+
+        // Lock identity fields
+        document.getElementById("customerName").readOnly  = true;
+        document.getElementById("mobile").readOnly        = true;
+        document.getElementById("salesman").disabled      = true;
+        document.getElementById("activityType").disabled  = true;
+        document.getElementById("submitBtn").textContent  = "✏️ Update Customer";
+        document.getElementById("newEntryBtn").style.display = "inline-block";
+
+        if (res.autoInfo && res.autoInfo.changed) {
+          showAutoStatusAlert(res.autoInfo);
+        } else {
+          document.getElementById("autoStatusAlert").style.display = "none";
+        }
+
+      } else {
+        existingCustomer = false;
+        document.getElementById("customerFound").style.display      = "none";
+        document.getElementById("autoStatusAlert").style.display    = "none";
+        document.getElementById("newEntryBtn").style.display        = "none";
+        document.getElementById("customerName").readOnly  = false;
+        document.getElementById("mobile").readOnly        = false;
+        document.getElementById("salesman").disabled      = false;
+        document.getElementById("activityType").disabled  = false;
+        document.getElementById("submitBtn").textContent  = "💾 Save Customer";
+      }
+    })
+  , function(e) { console.error(e.message); });
+}
+
+// ════════════════════════════════════════════════════════════
+// FILL FIELDS (single source)
+// ════════════════════════════════════════════════════════════
+function fillCustomerFields(d) {
+  setVal("customerName",   d.customerName);
+  setVal("mobile",         d.mobile);
+  setVal("village",        d.village);
+  setVal("activityType",   d.activityType);
+  setVal("model",          d.model);
+  setVal("salesman",       d.salesman);
+  setVal("enquiryType",    d.enquiryType);
+  setVal("age",            d.age);
+  setVal("exchange",       d.exchange);
+  setVal("oldDemand",      d.oldDemand);
+  setVal("rate",           d.rate);
+  setVal("decisionMaker",  d.decisionMaker);
+  setVal("land",           d.land);
+  setVal("swarajDealer",   d.swarajDealer);
+
+  document.getElementById("oldRemarks").value = d.remark || "";
+  document.getElementById("newRemark").value  = "";
+  document.getElementById("rowNumber").value  = d.rowNumber || "";
+  document.getElementById("editMode").value   = d.rowNumber ? "Y" : "N";
+
+  setCBs(".customerType", d.customerType);
+  setCBs(".usage",        d.usage);
+  setCBs(".brand",        d.preferredBrand);
+}
+
+function setVal(id, val) {
+  var el = document.getElementById(id);
+  if (el) el.value = val || "";
+}
+
+function setCBs(sel, csv) {
+  document.querySelectorAll(sel).forEach(function(el) {
+    el.checked = !!(csv && csv.indexOf(el.value) > -1);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// EDIT CUSTOMER (from search)
+// ════════════════════════════════════════════════════════════
+function editCustomer(rowNumber) {
+  gasCall('getCustomerByRow', { row: rowNumber }, function(data) {
+      fillCustomerFields(data);
+      document.getElementById("customerName").readOnly  = true;
+      document.getElementById("mobile").readOnly        = true;
+      document.getElementById("salesman").disabled      = true;
+      document.getElementById("activityType").disabled  = true;
+      document.getElementById("editMode").value         = "Y";
+      document.getElementById("submitBtn").textContent  = "✏️ Update Customer";
+      document.getElementById("newEntryBtn").style.display = "inline-block";
+      document.getElementById("autoStatusAlert").style.display = "none";
+      showTab("daily");
+      window.scrollTo(0,0);
+  }, function(e) { alert("Error: " + e.message); });
+}
+
+// ════════════════════════════════════════════════════════════
+// SUBMIT
+// ════════════════════════════════════════════════════════════
+function submitForm() {
+  var brands = [], usages = [], types = [];
+  document.querySelectorAll(".brand:checked")        .forEach(function(e){ brands.push(e.value); });
+  document.querySelectorAll(".usage:checked")        .forEach(function(e){ usages.push(e.value); });
+  document.querySelectorAll(".customerType:checked") .forEach(function(e){ types.push(e.value);  });
+
+  var data = {
+    village:        getVal("village"),
+    activityType:   getVal("activityType"),
+    mobile:         getVal("mobile"),
+    model:          getVal("model"),
+    exchange:       getVal("exchange"),
+    rate:           getVal("rate"),
+    oldDemand:      getVal("oldDemand"),
+    enquiryType:    getVal("enquiryType"),
+    salesman:       getVal("salesman"),
+    customerName:   getVal("customerName"),
+    customerType:   types.join(", "),
+    age:            getVal("age"),
+    usage:          usages.join(", "),
+    preferredBrand: brands.join(", "),
+    swarajDealer:   getVal("swarajDealer"),
+    decisionMaker:  getVal("decisionMaker"),
+    land:           getVal("land"),
+    remark:         getVal("newRemark"),
+    location:       "",
+    serviceType:        getVal("serviceType"),
+    serviceComplaint:   getVal("serviceComplaint"),
+    mechanicName:       getVal("mechanicName"),
+    serviceStatus:      getVal("serviceStatus"),
+    serviceDate:        getVal("serviceDate"),
+    warranty:           getVal("warranty"),
+    serviceModel:       getVal("serviceModel"),
+    chasis:             getVal("chasis"),
+    hours:              getVal("hours"),
+    bill:               getVal("bill"),
+    payment:            getVal("payment")
+  };
+
+  var btn = document.getElementById("submitBtn");
+  btn.disabled = true;
+  btn.textContent = "⏳ Saving...";
+
+  gasCall('saveData', { data: data }, function(resp) {
+      btn.disabled = false;
+      btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
+      var again = confirm("✅ " + resp + "\n\nNew entry?");
+      if (again) resetForm();
+      else {
+        document.body.innerHTML =
+          "<div style='text-align:center;padding:60px;font-family:Arial'>" +
+          "<h1 style='color:#1565c0'>धन्यवाद 🙏</h1>" +
+          "<p>Data saved successfully.</p></div>";
+      }
+  }, function(e) {
+      btn.disabled = false;
+      btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
+      alert("❌ Error: " + e.message);
+  });
+}
+
+function getVal(id) {
+  var el = document.getElementById(id);
+  return el ? el.value : "";
+}
+
+// ════════════════════════════════════════════════════════════
+// NEW ENTRY / RESET
+// ════════════════════════════════════════════════════════════
+function newEntry() {
+  if (!confirm("नया फॉर्म शुरू करना है? सभी जानकारी हट जाएगी।")) return;
+  resetForm();
+}
+
+function resetForm() {
+  existingCustomer = false;
+
+  document.querySelectorAll("input:not([type='hidden'])").forEach(function(el) {
+    if (el.type === "checkbox") el.checked = false;
+    else el.value = "";
+    el.readOnly = false;
+    el.disabled = false;
+  });
+  document.querySelectorAll("textarea").forEach(function(el) { el.value = ""; });
+  document.querySelectorAll("select").forEach(function(el) {
+    el.selectedIndex = 0;
+    el.disabled = false;
+  });
+
+  document.getElementById("rowNumber").value = "";
+  document.getElementById("editMode").value  = "N";
+  document.getElementById("customerFound").style.display   = "none";
+  document.getElementById("autoStatusAlert").style.display = "none";
+  document.getElementById("newEntryBtn").style.display     = "none";
+  document.getElementById("submitBtn").textContent = "💾 Save Customer";
+  document.getElementById("submitBtn").disabled    = false;
+
+  document.getElementById("salesFields").classList.remove("hidden");
+  document.getElementById("serviceFields").classList.add("hidden");
+  document.getElementById("showroomNotice").style.display = "none";
+
+  resetPhotos();
+  window.scrollTo(0,0);
+}
+
+// ════════════════════════════════════════════════════════════
+// AUTO STATUS ALERT
+// ════════════════════════════════════════════════════════════
+function showAutoStatusAlert(info) {
+  var titles = {
+    "Warm": "🔴 Auto-Changed: HOT → WARM",
+    "Cold": "🔴 Auto-Changed: WARM → COLD"
+  };
+  var bodies = {
+    "Warm": "This enquiry was <b>HOT</b> for more than 15 days without conversion. Status auto-downgraded to <b>WARM</b> and saved.",
+    "Cold": "This enquiry was <b>WARM</b> for more than 45 days without conversion. Status auto-downgraded to <b>COLD</b> and saved."
+  };
+  document.getElementById("autoAlertTitle").innerHTML = titles[info.newStatus] || "Status Changed";
+  document.getElementById("autoAlertBody").innerHTML  =
+    (bodies[info.newStatus] || "") +
+    " <small style='color:#999'>Auto remark logged.</small>";
+  document.getElementById("autoStatusAlert").style.display = "block";
+  document.getElementById("enquiryType").value = info.newStatus;
+}
+
+// ════════════════════════════════════════════════════════════
+// SEARCH
+// ════════════════════════════════════════════════════════════
+function runSearch() {
+  document.getElementById("searchResults").innerHTML =
+    "<div class='spinner'>🔍 Searching...</div>";
+
+  gasCall('searchCustomersAdvanced', { query: {
+      searchText: document.getElementById("searchInput").value,
+      salesman:   document.getElementById("searchSalesman").value,
+      status:     document.getElementById("searchStatus").value
+  }}, renderResults, function(e) {
+      document.getElementById("searchResults").innerHTML =
+        "<p style='color:red;padding:12px'>Error: " + e.message + "</p>";
+  });
+}
+
+function statusBadge(s) {
+  var cls = { "Hot":"badge-hot","Warm":"badge-warm","Cold":"badge-cold","Contacted":"badge-contacted" };
+  return "<span class='badge " + (cls[s]||"badge-warm") + "'>" + (s||"—") + "</span>";
+}
+
+function renderResults(results) {
+  var c = document.getElementById("searchResults");
+  if (!results.length) {
+    c.innerHTML = "<p style='color:#999;text-align:center;padding:20px'>No records found.</p>";
+    return;
+  }
+  var html = "<p style='font-size:13px;color:#666;margin-bottom:8px'>" + results.length + " record(s) found</p>";
+
+  results.forEach(function(r) {
+    var hasAuto = r.remark && r.remark.indexOf("[AUTO]") > -1;
+    html +=
+      "<div class='result-card'>" +
+      "<div class='result-name'>" + (r.customerName||"—") + " " + statusBadge(r.enquiryType) + "</div>" +
+      "<div class='result-row'>📱 " + (r.mobile||"—") + " &nbsp; 🏘️ " + (r.village||"—") + "</div>" +
+      "<div class='result-row'>👤 " + (r.salesman||"—") + " &nbsp; 🚜 " + (r.model||"—") + "</div>" +
+      "<div class='result-row'>🕐 " + (r.lastUpdated||"—") + "</div>" +
+      (hasAuto ? "<div class='auto-remark-strip'>🔴 Auto status change recorded</div>" : "") +
+      "<button class='btn-edit' onclick='editCustomer(" + r.rowNumber + ")'>✏️ Edit</button>" +
+      "</div>";
+  });
+  c.innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════════════
+// ATTENDANCE
+// ════════════════════════════════════════════════════════════
+function loadAttendance() {
+  document.getElementById("attResults").innerHTML =
+    "<div class='spinner'>⏳ Loading...</div>";
+
+  gasCall('getAttendance', { filters: {
+      month:    document.getElementById("attMonth").value,
+      year:     document.getElementById("attYear").value,
+      salesman: document.getElementById("attSalesman").value
+  }}, renderAttendance, function(e) {
+      document.getElementById("attResults").innerHTML =
+        "<p style='color:red;padding:12px'>Error: " + e.message + "</p>";
+  });
+}
+
+function renderAttendance(data) {
+  var c = document.getElementById("attResults");
+  if (!data || !data.results || !data.results.length) {
+    c.innerHTML = "<p style='text-align:center;color:#999;padding:20px'>No data found.</p>";
+    return;
+  }
+
+  var mNames = ["","January","February","March","April","May","June",
+                "July","August","September","October","November","December"];
+  var html = "<p style='font-size:13px;color:#666;margin-bottom:8px'>📅 " +
+             mNames[data.month] + " " + data.year + " — " +
+             data.results[0].workingDays + " working days</p>";
+
+  data.results.forEach(function(r) {
+    var pct = r.workingDays > 0 ? Math.round(r.presentCount / r.workingDays * 100) : 0;
+    var barColor = pct >= 90 ? "#4caf50" : pct >= 70 ? "#ffa726" : "#ef5350";
+    var initials = r.salesman.substring(0,2).toUpperCase();
+
+    // Calendar
+    var cal = "<div class='cal-grid'>";
+    ["Su","Mo","Tu","We","Th","Fr","Sa"].forEach(function(h) {
+      cal += "<div class='cal-hdr'>" + h + "</div>";
+    });
+    var firstDow = new Date(data.year, data.month - 1, 1).getDay();
+    for (var b = 0; b < firstDow; b++) cal += "<div class='cal-day day-empty'></div>";
+    data.calendar.forEach(function(c2) {
+      var st  = r.dayStatus[c2.dateKey];
+      var cls = st === "present" ? "day-present" :
+                st === "absent"  ? "day-absent"  :
+                st === "sunday"  ? "day-sunday"  : "day-future";
+      var lbl = st === "present" ? "✓" : st === "absent" ? "✗" : "";
+      cal += "<div class='cal-day " + cls + "'><span class='dn'>" + c2.day + "</span><span class='dl'>" + lbl + "</span></div>";
+    });
+    cal += "</div>";
+
+    html +=
+      "<div class='att-card'>" +
+      "<div class='att-header'>" +
+        "<div class='att-avatar'>" + initials + "</div>" +
+        "<div><div class='att-name'>" + r.salesman + "</div>" +
+        "<div class='att-pct'>" + pct + "% attendance</div></div>" +
+      "</div>" +
+      "<div class='att-stats'>" +
+        "<span class='att-badge ab-present'>✅ " + r.presentCount + " Present</span>" +
+        "<span class='att-badge ab-absent'>❌ "  + r.absentCount  + " Absent</span>" +
+        "<span class='att-badge ab-working'>📅 " + r.workingDays  + " Days</span>" +
+      "</div>" +
+      "<div class='pct-bar'><div class='pct-fill' style='width:" + pct + "%;background:" + barColor + "'></div></div>" +
+      cal +
+      "</div>";
+  });
+
+  c.innerHTML = html;
+}
+// ════════════════════════════════════════════════════════════
+// DASHBOARD
+// ════════════════════════════════════════════════════════════
+var DASH_COLORS = {
+  Hot:       "#c62828",
+  Warm:      "#f57f17",
+  Cold:      "#1565c0",
+  Contacted: "#2e7d32"
+};
+var drillRecords  = [];   // holds current drill-down records for CSV export
+var activeFilters = {};   // last applied filters
+
+// Load filter options once on first open
+var filterOptionsLoaded = false;
+function loadFilterOptions() {
+  if (filterOptionsLoaded) return;
+  gasCall('getDashboardFilterOptions', {}, function(opts) {
+      filterOptionsLoaded = true;
+      var yr = new Date().getFullYear();
+      var yrSel = document.getElementById("dfYear");
+      (opts.years || []).forEach(function(y) {
+        if (!document.querySelector('#dfYear option[value="' + y + '"]')) {
+          var o = document.createElement("option");
+          o.value = y; o.text = y;
+          if (parseInt(y) === yr) o.selected = true;
+          yrSel.appendChild(o);
+        }
+      });
+      var actSel = document.getElementById("dfActivity");
+      (opts.activities || []).forEach(function(a) {
+        var o = document.createElement("option"); o.value = a; o.text = a;
+        actSel.appendChild(o);
+      });
+      var vilSel = document.getElementById("dfVillage");
+      (opts.villages || []).forEach(function(v) {
+        var o = document.createElement("option"); o.value = v; o.text = v;
+        vilSel.appendChild(o);
+      });
+  });
+}
+
+function getActiveFilters() {
+  return {
+    year:     document.getElementById("dfYear").value,
+    month:    document.getElementById("dfMonth").value,
+    salesman: document.getElementById("dfSalesman").value,
+    activity: document.getElementById("dfActivity").value,
+    village:  document.getElementById("dfVillage").value
+  };
+}
+
+function loadDashboard() {
+  dashLoaded = false;
+  loadFilterOptions();
+  activeFilters = getActiveFilters();
+  document.getElementById("dashContent").innerHTML         = "<div class='spinner'>⏳ Loading analytics...</div>";
+  document.getElementById("dashGenAt").textContent         = "Loading...";
+  document.getElementById("dashDrillPanel").style.display  = "none";
+  document.getElementById("autoDowngradePanel").style.display = "none";
+  autoDowngradeData = null;
+
+  gasCall('getDashboardData', { filters: activeFilters }, renderDashboard, function(e) {
+      document.getElementById("dashContent").innerHTML =
+        "<p style='color:red;padding:12px'>❌ Error: " + e.message + "</p>";
+  });
+}
+
+function renderDashboard(d) {
+  dashLoaded = true;
+  document.getElementById("dashGenAt").textContent = "Updated: " + d.generatedAt;
+
+  var totalYTD = d.ytd.Total || 0;
+  var html = "";
+
+  // ── 1. KPI CARDS (clickable) ───────────────────────────────
+  var fYear = d.filters && d.filters.year && d.filters.year != "0" ? d.filters.year : new Date().getFullYear();
+  html += "<div class='dash-section-title'>📅 Inquiry Overview</div>";
+  html += "<div class='kpi-grid'>";
+  html += kpiCard(totalYTD,        "Total Inquiries", "kpi-total",  "All");
+  html += kpiCard(d.ytd.Hot,       "🔴 Hot",          "kpi-hot",    "Hot");
+  html += kpiCard(d.ytd.Warm,      "🟡 Warm",         "kpi-warm",   "Warm");
+  html += kpiCard(d.ytd.Cold,      "🔵 Cold",         "kpi-cold",   "Cold");
+  html += kpiCard(d.ytd.Contacted, "✅ Contacted",    "kpi-cont",   "Contacted");
+  html += "</div>";
+
+  // ── 1b. Auto-downgrade strip (load separately) ────────────
+  loadAutoDowngrades();
+
+  // ── 2. CONTACT TYPE (New vs Repeat) ───────────────────────
+  var totalCT = (d.contactType.New || 0) + (d.contactType.Repeat || 0);
+  html += "<div class='dash-section-title'>👥 Contact Type</div>";
+  html += "<div class='card' style='padding:14px'>";
+  html += "<div class='donut-wrap'>";
+  html += buildDonut(d.contactType.New, d.contactType.Repeat, totalCT);
+  html += "<div class='donut-legend'>";
+  html += donutLegendRow("🆕 New Contacts",    d.contactType.New,    "#1565c0");
+  html += donutLegendRow("🔁 Repeat Contacts", d.contactType.Repeat, "#c62828");
+  if (totalCT > 0) {
+    var newPct = Math.round(d.contactType.New / totalCT * 100);
+    html += "<div style='font-size:13px;color:#999;margin-top:8px;text-align:center'>New: " + newPct + "% &nbsp;|&nbsp; Repeat: " + (100-newPct) + "%</div>";
+  }
+  html += "</div></div></div>";
+
+  // ── 3. MONTH-WISE STACKED BAR ─────────────────────────────
+  html += "<div class='dash-section-title'>📈 Month-wise Inquiry Trend</div>";
+  html += "<div class='card' style='padding:14px'>";
+  html += "<div class='legend'>";
+  ["Hot","Warm","Cold","Contacted"].forEach(function(s) {
+    html += "<div class='legend-item'><div class='legend-dot' style='background:" + DASH_COLORS[s] + "'></div>" + s + "</div>";
+  });
+  html += "</div>";
+  html += buildStackedChart(d.monthly);
+  html += "</div>";
+
+  // ── 4. SALESMAN FIELD COVERAGE TABLE ──────────────────────
+  html += "<div class='dash-section-title'>👤 Salesman Field Coverage</div>";
+  html += "<div class='card' style='padding:0;overflow:hidden'>";
+  html += "<div class='dash-table-wrap'><table class='dash-table'>";
+  html += "<tr><th>Salesman</th><th>Total</th><th>🔴Hot</th><th>🟡Warm</th><th>🔵Cold</th><th>✅Contacted</th></tr>";
+  d.salesman.forEach(function(s) {
+    if (s.Total === 0) return;
+    html += "<tr>";
+    html += "<td>" + s.name + "</td>";
+    html += "<td><b>" + s.Total + "</b></td>";
+    html += "<td style='color:" + DASH_COLORS.Hot       + ";font-weight:700'>" + s.Hot       + "</td>";
+    html += "<td style='color:" + DASH_COLORS.Warm      + ";font-weight:700'>" + s.Warm      + "</td>";
+    html += "<td style='color:" + DASH_COLORS.Cold      + ";font-weight:700'>" + s.Cold      + "</td>";
+    html += "<td style='color:" + DASH_COLORS.Contacted + ";font-weight:700'>" + s.Contacted + "</td>";
+    html += "</tr>";
+  });
+  html += "</table></div></div>";
+
+  // ── 5. SALESMAN SHARE BAR ─────────────────────────────────
+  html += "<div class='dash-section-title'>🏆 Inquiry Share by Salesman</div>";
+  html += "<div class='card' style='padding:14px'>";
+  var maxSales = Math.max.apply(null, d.salesman.map(function(s){ return s.Total; })) || 1;
+  html += "<div class='bar-chart'>";
+  d.salesman.forEach(function(s) {
+    if (s.Total === 0) return;
+    var pct = Math.round(s.Total / maxSales * 100);
+    html +=
+      "<div class='bar-row'>" +
+      "<div class='bar-label'>" + s.name.substring(0,8) + "</div>" +
+      "<div class='bar-track'><div class='bar-fill' style='width:" + pct + "%;background:linear-gradient(90deg,var(--red),var(--blue))'>" +
+      "</div></div>" +
+      "<div class='bar-val'>" + s.Total + "</div>" +
+      "</div>";
+  });
+  html += "</div></div>";
+
+  // ── 6. ACTIVITY BREAKDOWN ─────────────────────────────────
+  html += "<div class='dash-section-title'>🚗 Activity Type Breakdown</div>";
+  html += "<div class='card' style='padding:14px'>";
+  var acts   = Object.keys(d.activity).map(function(k){ return { name:k, cnt:d.activity[k] }; })
+                .sort(function(a,b){ return b.cnt-a.cnt; });
+  var maxAct = acts.length ? acts[0].cnt : 1;
+  var actColors = ["#1565c0","#c62828","#2e7d32","#f57f17","#6a1b9a","#00838f","#4e342e","#37474f"];
+  html += "<div class='bar-chart'>";
+  acts.forEach(function(a, idx) {
+    var pct = Math.round(a.cnt / maxAct * 100);
+    var col = actColors[idx % actColors.length];
+    html +=
+      "<div class='bar-row'>" +
+      "<div class='bar-label' style='width:72px;font-size:12px'>" + a.name.substring(0,11) + "</div>" +
+      "<div class='bar-track'><div class='bar-fill' style='width:" + pct + "%;background:" + col + "'>" +
+      "<span>" + a.cnt + "</span></div></div>" +
+      "</div>";
+  });
+  html += "</div></div>";
+
+  // ── 7. TOP VILLAGES ───────────────────────────────────────
+  if (d.topVillages && d.topVillages.length) {
+    html += "<div class='dash-section-title'>🏘️ Top Villages Covered</div>";
+    html += "<div class='card' style='padding:14px'><div class='bar-chart'>";
+    var maxV = d.topVillages[0].count || 1;
+    d.topVillages.forEach(function(v, idx) {
+      var pct = Math.round(v.count / maxV * 100);
+      html +=
+        "<div class='bar-row'>" +
+        "<div class='bar-label' style='width:72px;font-size:12px'>" + (v.name||"—").substring(0,11) + "</div>" +
+        "<div class='bar-track'><div class='bar-fill' style='width:" + pct + "%;background:#2e7d32'>" +
+        "<span>" + v.count + "</span></div></div>" +
+        "</div>";
+    });
+    html += "</div></div>";
+  }
+
+  // ── 8. TOP MODELS ─────────────────────────────────────────
+  if (d.topModels && d.topModels.length) {
+    html += "<div class='dash-section-title'>🚜 Top Models in Demand</div>";
+    html += "<div class='card' style='padding:14px'><div class='bar-chart'>";
+    var maxM = d.topModels[0].count || 1;
+    d.topModels.forEach(function(m) {
+      var pct = Math.round(m.count / maxM * 100);
+      html +=
+        "<div class='bar-row'>" +
+        "<div class='bar-label' style='width:72px;font-size:12px'>" + (m.name||"—").substring(0,11) + "</div>" +
+        "<div class='bar-track'><div class='bar-fill' style='width:" + pct + "%;background:#6a1b9a'>" +
+        "<span>" + m.count + "</span></div></div>" +
+        "</div>";
+    });
+    html += "</div></div>";
+  }
+
+  document.getElementById("dashContent").innerHTML = html;
+}
+
+// ── Dashboard Helpers ──────────────────────────────────────
+function kpiCard(val, lbl, cls, status) {
+  var clickable = status ? "onclick=\"drillDown('" + status + "')\" style='cursor:pointer'" : "";
+  return "<div class='kpi-card " + cls + "' " + clickable + " title='Click to view records'>" +
+         "<div class='kpi-val'>" + (val||0) + "</div>" +
+         "<div class='kpi-lbl'>" + lbl + (status ? " 👆" : "") + "</div>" +
+         "</div>";
+}
+
+// ── Drill-down: load records for a status ─────────────────
+function drillDown(status) {
+  var panel = document.getElementById("dashDrillPanel");
+  panel.style.display = "block";
+  document.getElementById("drillContent").innerHTML = "<div class='spinner'>⏳ Loading records...</div>";
+  document.getElementById("drillDownload").style.display = "none";
+  document.getElementById("drillTitle").textContent =
+    (status === "All" ? "📋 All Inquiries" : "📋 " + status + " Inquiries");
+
+  panel.scrollIntoView({ behavior: "smooth" });
+
+  var f = Object.assign({}, activeFilters, { status: status });
+
+  gasCall('getFilteredInquiries', { filters: f }, function(res) {
+      drillRecords = res.records || [];
+      renderDrillTable(drillRecords, status);
+  }, function(e) {
+      document.getElementById("drillContent").innerHTML =
+        "<p style='color:red;padding:10px'>Error: " + e.message + "</p>";
+  });
+}
+
+function closeDrill() {
+  document.getElementById("dashDrillPanel").style.display = "none";
+  drillRecords = [];
+}
+
+function renderDrillTable(records, status) {
+  var content  = document.getElementById("drillContent");
+  var dlBtn    = document.getElementById("drillDownload");
+
+  if (!records.length) {
+    content.innerHTML = "<p style='text-align:center;color:#999;padding:16px'>No records found.</p>";
+    dlBtn.style.display = "none";
+    return;
+  }
+
+  // Show download button if > 30 records
+  dlBtn.style.display = records.length > 30 ? "block" : "none";
+
+  var statusColor = DASH_COLORS[status] || "var(--blue)";
+  var html = "<p style='font-size:12px;color:var(--muted);margin-bottom:8px'>" +
+             records.length + " record(s) found</p>";
+
+  records.forEach(function(r) {
+    html +=
+      "<div class='result-card' style='margin-bottom:8px'>" +
+      "<div style='display:flex;justify-content:space-between;align-items:flex-start'>" +
+        "<div class='result-name'>" + (r.customerName || "—") + "</div>" +
+        "<span class='badge' style='background:" + (DASH_COLORS[r.status]||"#eee") + "20;color:" + (DASH_COLORS[r.status]||"#333") + ";border:1px solid " + (DASH_COLORS[r.status]||"#ccc") + "'>" + (r.status||"—") + "</span>" +
+      "</div>" +
+      "<div class='result-row'>📱 " + (r.mobile||"—") + " &nbsp;🏘️ " + (r.village||"—") + "</div>" +
+      "<div class='result-row'>👤 " + (r.salesman||"—") + " &nbsp;🚗 " + (r.activity||"—") + "</div>" +
+      "<div class='result-row'>🚜 " + (r.model||"—") + " &nbsp;📅 " + (r.date||"—") + "</div>" +
+      (r.remark ? "<div class='result-row' style='font-size:13px;color:#888;margin-top:3px'>💬 " + r.remark + "...</div>" : "") +
+      "</div>";
+  });
+
+  content.innerHTML = html;
+}
+
+// ── CSV Download ──────────────────────────────────────────
+function downloadCSV() {
+  if (!drillRecords.length) return;
+  var headers = ["Date","Customer Name","Mobile","Village","Salesman","Activity","Status","Model","Remark"];
+  var rows    = [headers];
+  drillRecords.forEach(function(r) {
+    rows.push([
+      r.date, r.customerName, r.mobile, r.village,
+      r.salesman, r.activity, r.status, r.model,
+      '"' + (r.remark||"").replace(/"/g,'""') + '"'
+    ]);
+  });
+  var csv     = rows.map(function(r) { return r.join(","); }).join("\n");
+  var blob    = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  var url     = URL.createObjectURL(blob);
+  var link    = document.createElement("a");
+  link.href   = url;
+  link.download = "RKT_Inquiries_" + new Date().toISOString().slice(0,10) + ".csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function donutLegendRow(label, count, color) {
+  return "<div class='dl-row'>" +
+         "<div class='dl-name'><div class='dl-dot' style='background:" + color + "'></div>" + label + "</div>" +
+         "<div class='dl-cnt'>" + (count||0) + "</div>" +
+         "</div>";
+}
+
+function buildDonut(newC, repeatC, total) {
+  if (!total) return "<div class='donut'><svg width='90' height='90'><circle cx='45' cy='45' r='35' fill='none' stroke='#eee' stroke-width='14'/></svg><div class='donut-center'><div class='dc-val'>0</div><div class='dc-lbl'>TOTAL</div></div></div>";
+  var r = 35, circ = 2 * Math.PI * r;
+  var newDash    = (newC    / total) * circ;
+  var repeatDash = (repeatC / total) * circ;
+  var svg =
+    "<svg width='90' height='90' viewBox='0 0 90 90'>" +
+    "<circle cx='45' cy='45' r='" + r + "' fill='none' stroke='#eee' stroke-width='14'/>" +
+    "<circle cx='45' cy='45' r='" + r + "' fill='none' stroke='#1565c0' stroke-width='14'" +
+    " stroke-dasharray='" + newDash.toFixed(1) + " " + circ.toFixed(1) + "'" +
+    " stroke-dashoffset='0' transform='rotate(-90 45 45)'/>" +
+    "<circle cx='45' cy='45' r='" + r + "' fill='none' stroke='#c62828' stroke-width='14'" +
+    " stroke-dasharray='" + repeatDash.toFixed(1) + " " + circ.toFixed(1) + "'" +
+    " stroke-dashoffset='" + (-newDash).toFixed(1) + "' transform='rotate(-90 45 45)'/>" +
+    "</svg>";
+  return "<div class='donut'>" + svg +
+         "<div class='donut-center'><div class='dc-val'>" + total + "</div><div class='dc-lbl'>TOTAL</div></div>" +
+         "</div>";
+}
+
+function buildStackedChart(monthly) {
+  if (!monthly || !monthly.length) return "<p style='color:#999;text-align:center'>No data</p>";
+  var maxVal = Math.max.apply(null, monthly.map(function(m){ return m.Total; })) || 1;
+  var maxH   = 80;
+  var html   = "<div class='stacked-wrap'><div class='stacked-chart'>";
+
+  monthly.forEach(function(m) {
+    if (m.Total === 0) return;
+    var hotH  = Math.round((m.Hot       / maxVal) * maxH);
+    var wrmH  = Math.round((m.Warm      / maxVal) * maxH);
+    var cldH  = Math.round((m.Cold      / maxVal) * maxH);
+    var conH  = Math.round((m.Contacted / maxVal) * maxH);
+    html += "<div class='stack-col'>";
+    html += "<div class='stack-total'>" + m.Total + "</div>";
+    if (m.Contacted) html += "<div class='stack-bar' style='height:" + conH + "px;background:" + DASH_COLORS.Contacted + "'></div>";
+    if (m.Cold)      html += "<div class='stack-bar' style='height:" + cldH + "px;background:" + DASH_COLORS.Cold      + "'></div>";
+    if (m.Warm)      html += "<div class='stack-bar' style='height:" + wrmH + "px;background:" + DASH_COLORS.Warm      + "'></div>";
+    if (m.Hot)       html += "<div class='stack-bar' style='height:" + hotH + "px;background:" + DASH_COLORS.Hot       + "'></div>";
+    html += "<div class='stack-lbl'>" + m.label + "</div>";
+    html += "</div>";
+  });
+
+  html += "</div></div>";
+  return html;
+}
+
+// ════════════════════════════════════════════════════════════
+// AUTO DOWNGRADE SECTION
+// ════════════════════════════════════════════════════════════
+var autoDowngradeData = null;
+
+function loadAutoDowngrades() {
+  var panel = document.getElementById("autoDowngradePanel");
+  panel.style.display = "block";
+  document.getElementById("adLoading").style.display = "block";
+  document.getElementById("adHWBtn").style.display   = "none";
+  document.getElementById("adWCBtn").style.display   = "none";
+  document.getElementById("adHWList").style.display  = "none";
+  document.getElementById("adWCList").style.display  = "none";
+
+  gasCall('getAutoDowngrades', { months: 3 }, renderAutoDowngrades, function(e) {
+    document.getElementById("adLoading").style.display = "none";
+    document.getElementById("adLoading").textContent   = "❌ " + e.message;
+  });
+}
+
+function renderAutoDowngrades(data) {
+  autoDowngradeData = data;
+  document.getElementById("adLoading").style.display = "none";
+
+  document.getElementById("adTotal").textContent = data.total;
+  document.getElementById("adHW").textContent    = data.hotToWarm.length;
+  document.getElementById("adWC").textContent    = data.warmToCold.length;
+
+  // Show toggle buttons only if there is data
+  if (data.hotToWarm.length > 0) {
+    document.getElementById("adHWBtn").style.display = "flex";
+    document.getElementById("adHWBtn").querySelector("span:first-child").textContent =
+      "🟡 Hot → Warm  (" + data.hotToWarm.length + " enquiries)";
+  }
+  if (data.warmToCold.length > 0) {
+    document.getElementById("adWCBtn").style.display = "flex";
+    document.getElementById("adWCBtn").querySelector("span:first-child").textContent =
+      "🔵 Warm → Cold  (" + data.warmToCold.length + " enquiries)";
+  }
+
+  if (data.total === 0) {
+    document.getElementById("adHWBtn").style.display = "none";
+    document.getElementById("adWCBtn").style.display = "none";
+    var noData = document.createElement("p");
+    noData.style.cssText = "text-align:center;color:#999;font-size:13px;padding:10px 0";
+    noData.textContent   = "✅ No auto-downgrades in last 3 months!";
+    document.getElementById("autoDowngradePanel").appendChild(noData);
+  }
+}
+
+function toggleAutoList(type) {
+  var listEl  = document.getElementById("ad" + type + "List");
+  var arrowEl = document.getElementById("ad" + type + "Arrow");
+  var isOpen  = listEl.style.display !== "none";
+
+  if (isOpen) {
+    listEl.style.display  = "none";
+    arrowEl.textContent   = "▼";
+    return;
+  }
+
+  arrowEl.textContent  = "▲";
+  listEl.style.display = "block";
+
+  if (listEl.innerHTML) return;  // already rendered
+
+  var records = type === "HW"
+    ? (autoDowngradeData ? autoDowngradeData.hotToWarm : [])
+    : (autoDowngradeData ? autoDowngradeData.warmToCold : []);
+
+  if (!records.length) {
+    listEl.innerHTML = "<p style='color:#999;font-size:13px;padding:6px 0'>No records.</p>";
+    return;
+  }
+
+  var html = "";
+  records.forEach(function(r) {
+    var isWC     = type === "WC";
+    var arrow    = isWC
+      ? "<span class='auto-arrow arrow-wc'>Warm → Cold</span>"
+      : "<span class='auto-arrow arrow-hw'>Hot → Warm</span>";
+    var nowBadge = isWC
+      ? "<span class='badge badge-cold'>Now: Cold</span>"
+      : "<span class='badge badge-warm'>Now: Warm</span>";
+
+    html +=
+      "<div class='auto-record" + (isWC ? " wc" : "") + "'>" +
+        "<div class='auto-record-top'>" +
+          "<div class='auto-record-name'>" + (r.customerName || "—") + "</div>" +
+          arrow +
+        "</div>" +
+        "<div class='auto-record-meta'>" +
+          "📱 " + (r.mobile   || "—") + " &nbsp;" +
+          "👤 " + (r.salesman || "—") + " &nbsp;" +
+          "🏘️ " + (r.village  || "—") +
+        "</div>" +
+        "<div class='auto-record-meta' style='margin-top:4px'>" +
+          "🚜 " + (r.model || "—") + " &nbsp;" +
+          "📅 Changed: <strong>" + r.changedDate + "</strong> &nbsp;" +
+          nowBadge +
+        "</div>" +
+        "<button class='btn-edit' style='margin-top:8px;font-size:12px;padding:6px 14px'" +
+          " onclick='editCustomer(" + r.rowNumber + ")'>✏️ Edit</button>" +
+      "</div>";
+  });
+
+  listEl.innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════════════
+// ACTIVITY PHOTOS
+// ════════════════════════════════════════════════════════════
+var activityPhotos = [];  // { dataUrl, base64, mimeType, name, status, driveUrl }
+var MAX_PHOTOS     = 10;
+
+// ── Read + compress using FileReader → Image → Canvas ──────
+// Canvas works fine in Apps Script web apps (only URL.createObjectURL is blocked)
+// Target: max 900px wide/tall, JPEG quality 0.6  →  keeps each image under ~300KB
+
+var MAX_PX      = 900;
+var JPEG_QUALITY= 0.60;
+
+function handleActivityPhotos(input) {
+  if (!input.files || !input.files.length) return;
+
+  var remaining = MAX_PHOTOS - activityPhotos.length;
+  if (remaining <= 0) {
+    alert("Maximum " + MAX_PHOTOS + " photos already selected. Remove some first.");
+    input.value = "";
+    return;
+  }
+
+  var files = Array.prototype.slice.call(input.files, 0, remaining);
+  if (input.files.length > remaining) {
+    alert("Only " + remaining + " more photo(s) added (max 10). Extras ignored.");
+  }
+
+  var pending = files.length;
+
+  files.forEach(function(file) {
+    var reader    = new FileReader();
+    reader.onload = function(e) {
+      // Step 1: load raw dataUrl into an Image element
+      var img   = new Image();
+      img.onload = function() {
+        // Step 2: resize via canvas
+        var w = img.width, h = img.height;
+        if (w > MAX_PX || h > MAX_PX) {
+          if (w >= h) { h = Math.round(h * MAX_PX / w); w = MAX_PX; }
+          else        { w = Math.round(w * MAX_PX / h); h = MAX_PX; }
+        }
+        var canvas    = document.createElement("canvas");
+        canvas.width  = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+
+        // Step 3: export as compressed JPEG dataUrl
+        var compressedDataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+        var base64            = compressedDataUrl.split(",")[1];
+
+        activityPhotos.push({
+          dataUrl:  compressedDataUrl,
+          base64:   base64,
+          mimeType: "image/jpeg",
+          name:     file.name.replace(/\.[^.]+$/, "") + ".jpg",
+          status:   "pending",
+          driveUrl: ""
+        });
+        pending--;
+        if (pending === 0) renderPhotoGrid();
+      };
+      img.src = e.target.result;   // feed raw dataUrl to Image — no createObjectURL needed
+    };
+    reader.readAsDataURL(file);
+  });
+
+  input.value = "";
+}
+
+// ── Render thumbnail grid ──
+function renderPhotoGrid() {
+  var grid  = document.getElementById("photoPreviewGrid");
+  var badge = document.getElementById("photoCountBadge");
+
+  if (!activityPhotos.length) {
+    grid.innerHTML = "";
+    badge.style.display = "none";
+    document.getElementById("photoUploadBtnWrap").style.display     = "none";
+    document.getElementById("photoAddMoreWrap").style.display       = "none";
+    document.getElementById("photoUploadPlaceholder").style.display = "block";
+    document.getElementById("photoUploadArea").style.display        = "block";
+    return;
+  }
+
+  document.getElementById("photoUploadPlaceholder").style.display = "none";
+  document.getElementById("photoUploadArea").style.display        = "none";
+  badge.textContent   = activityPhotos.length;
+  badge.style.display = "inline-block";
+  // Show add-more only if under limit and not uploading
+  var isUploading = activityPhotos.some(function(p){ return p.status === "uploading"; });
+  document.getElementById("photoAddMoreWrap").style.display =
+    (!isUploading && activityPhotos.length < MAX_PHOTOS) ? "block" : "none";
+
+  var html = "";
+  activityPhotos.forEach(function(p, i) {
+    var overlay = "";
+    var sizeKB  = p.base64 ? Math.round((p.base64.length * 3/4) / 1024) : 0;
+    if      (p.status === "pending")   overlay = "<div class='upload-status' style='background:rgba(0,0,0,0.45)'>" + sizeKB + "KB</div>";
+    else if (p.status === "uploading") overlay = "<div class='upload-status'>⏳</div>";
+    else if (p.status === "done")      overlay = "<div class='upload-status upload-ok'>✅</div>";
+    else if (p.status === "error")     overlay = "<div class='upload-status upload-err'>❌</div>";
+
+    var rmBtn = (p.status === "pending" || p.status === "error")
+      ? "<button class='remove-btn' onclick='event.stopPropagation();removePhoto(" + i + ")'>✕</button>"
+      : "";
+
+    // If done, wrap in link; else just thumb
+    var inner =
+      "<img src='" + p.dataUrl + "' style='width:100%;height:100%;object-fit:cover;display:block;border-radius:8px'>" +
+      rmBtn + overlay;
+
+    html +=
+      p.status === "done" && p.driveUrl
+        ? "<a class='photo-thumb' href='" + p.driveUrl + "' target='_blank'>" + inner + "</a>"
+        : "<div class='photo-thumb'>" + inner + "</div>";
+  });
+
+  grid.innerHTML = html;
+
+  var hasPending = activityPhotos.some(function(p){ return p.status === "pending"; });
+  document.getElementById("photoUploadBtnWrap").style.display = hasPending ? "block" : "none";
+}
+
+function removePhoto(idx) {
+  activityPhotos.splice(idx, 1);
+  renderPhotoGrid();
+}
+
+// ── Sequential upload ──
+function uploadActivityPhotos() {
+  var salesman = document.getElementById("salesman").value;
+  var activity = document.getElementById("activityType").value;
+
+  if (!salesman) { alert("Please select a Salesman first."); return; }
+  if (!activity) { alert("Please select an Activity Type first."); return; }
+
+  var toUpload = activityPhotos.filter(function(p){ return p.status === "pending"; });
+  if (!toUpload.length) { alert("No pending photos to upload."); return; }
+
+  var btn = document.getElementById("photoUploadBtn");
+  btn.disabled = true;
+  document.getElementById("photoUploadProgress").style.display = "block";
+  document.getElementById("photoUploadBtnWrap").style.display  = "none";
+
+  var total    = toUpload.length;
+  var uploaded = 0;
+  var errors   = 0;
+
+  function setStatus(txt) {
+    document.getElementById("photoUploadStatus").textContent = txt;
+    document.getElementById("photoProgressFill").style.width =
+      Math.round((uploaded + errors) / total * 100) + "%";
+  }
+
+  function uploadNext(globalIdx) {
+    // Find next pending slot in activityPhotos array
+    while (globalIdx < activityPhotos.length && activityPhotos[globalIdx].status !== "pending") {
+      globalIdx++;
+    }
+    if (globalIdx >= activityPhotos.length) {
+      // All done
+      setStatus("✅ " + uploaded + " uploaded" + (errors ? "  ❌ " + errors + " failed" : ""));
+      document.getElementById("photoProgressFill").style.width = "100%";
+      renderPhotoGrid();
+      renderUploadedLinks();
+      btn.disabled = false;
+      return;
+    }
+
+    var p = activityPhotos[globalIdx];
+    p.status = "uploading";
+    setStatus("Uploading " + (uploaded + errors + 1) + " / " + total + "…");
+    renderPhotoGrid();
+
+    var capturedIdx = globalIdx;
+    // Show compressed size in KB for debugging
+    var sizeKB = Math.round((p.base64.length * 3/4) / 1024);
+    setStatus("Uploading " + (uploaded + errors + 1) + "/" + total +
+              " (" + sizeKB + " KB)…");
+
+    gasCall('saveActivityImage', { data: {
+        imageBase64: p.base64,
+        mimeType:    p.mimeType,
+        fileName:    p.name,
+        salesman:    salesman,
+        activity:    activity,
+        index:       globalIdx
+      }}, function(res) {
+        activityPhotos[capturedIdx].status   = "done";
+        activityPhotos[capturedIdx].driveUrl = res.url;
+        uploaded++;
+        uploadNext(capturedIdx + 1);
+      }, function(e) {
+        activityPhotos[capturedIdx].status = "error";
+        activityPhotos[capturedIdx].errMsg = e.message;
+        errors++;
+        document.getElementById("photoUploadStatus").textContent =
+          "❌ Photo " + (capturedIdx+1) + " failed: " + e.message;
+        uploadNext(capturedIdx + 1);
+      });
+  }
+
+  setStatus("Starting upload…");
+  uploadNext(0);
+}
+
+// ── Show Drive links after upload ──
+function renderUploadedLinks() {
+  var done = activityPhotos.filter(function(p){ return p.status === "done" && p.driveUrl; });
+  if (!done.length) return;
+
+  var html =
+    "<div style='background:var(--green-lt);border-left:3px solid var(--green);" +
+    "border-radius:8px;padding:10px 12px;margin-top:6px'>" +
+    "<div style='font-size:12px;font-weight:800;color:var(--green);margin-bottom:8px'>" +
+    "✅ " + done.length + " photo(s) saved to Drive — tap to view</div>";
+
+  done.forEach(function(p, i) {
+    html +=
+      "<div style='margin-bottom:5px'>" +
+      "<a href='" + p.driveUrl + "' target='_blank' style='" +
+        "font-size:12px;color:var(--blue);text-decoration:none;font-weight:600'>" +
+        "📷 Photo " + (i + 1) + " — " + p.name +
+      "</a></div>";
+  });
+
+  html += "</div>";
+  document.getElementById("photoUploadedLinks").innerHTML = html;
+}
+
+// ── Reset on new entry ──
+function resetPhotos() {
+  activityPhotos = [];
+  document.getElementById("photoPreviewGrid").innerHTML            = "";
+  document.getElementById("photoCountBadge").style.display         = "none";
+  document.getElementById("photoUploadProgress").style.display     = "none";
+  document.getElementById("photoUploadBtnWrap").style.display      = "none";
+  document.getElementById("photoAddMoreWrap").style.display        = "none";
+  document.getElementById("photoUploadedLinks").innerHTML          = "";
+  document.getElementById("photoUploadPlaceholder").style.display  = "block";
+  document.getElementById("photoUploadArea").style.display         = "block";
+}
+
+// ════════════════════════════════════════════════════════════
+// BILL APPROVAL
+// ════════════════════════════════════════════════════════════
+var billUnlocked    = false;
+var billRecords     = [];
+var billYearsInited = false;
+
+function checkBillPassword() {
+  var entered = document.getElementById("billPasswordInput").value;
+  var errEl   = document.getElementById("billPwdError");
+  if (entered === "220285") {
+    billUnlocked = true;
+    document.getElementById("billLockScreen").style.display = "none";
+    document.getElementById("billContent").style.display    = "block";
+    errEl.style.display = "none";
+    initBillYears();
+  } else {
+    errEl.style.display = "block";
+    document.getElementById("billPasswordInput").value = "";
+    document.getElementById("billPasswordInput").focus();
+    document.getElementById("billPasswordInput").style.borderColor = "var(--red)";
+    setTimeout(function(){
+      document.getElementById("billPasswordInput").style.borderColor = "";
+    }, 1500);
+  }
+}
+
+function toggleBillPwd() {
+  var inp = document.getElementById("billPasswordInput");
+  var eye = document.getElementById("billPwdEye");
+  if (inp.type === "password") { inp.type = "text";     eye.textContent = "🙈"; }
+  else                         { inp.type = "password"; eye.textContent = "👁️"; }
+}
+
+function initBillYears() {
+  if (billYearsInited) return;
+  billYearsInited = true;
+  var yr    = new Date().getFullYear();
+  var yrSel = document.getElementById("billYear");
+  for (var y = yr; y >= yr - 3; y--) {
+    var o = document.createElement("option");
+    o.value = y; o.text = y;
+    if (y === yr) o.selected = true;
+    yrSel.appendChild(o);
+  }
+  document.getElementById("billMonth").value = new Date().getMonth() + 1;
+}
+
+function loadBillReport() {
+  var filters = {
+    year:     document.getElementById("billYear").value,
+    month:    document.getElementById("billMonth").value,
+    salesman: document.getElementById("billSalesman").value
+  };
+  document.getElementById("billResults").innerHTML  = "<div class='spinner'>⏳ Loading bills...</div>";
+  document.getElementById("billKpiArea").style.display   = "none";
+  document.getElementById("billDownloadBtn").style.display = "none";
+
+  gasCall('getPetrolBillReport', { filters: filters }, renderBillReport, function(e) {
+    document.getElementById("billResults").innerHTML =
+      "<p style='color:red;padding:12px'>❌ Error: " + e.message + "</p>";
+  });
+}
+
+function renderBillReport(data) {
+  billRecords = data.records || [];
+
+  // ── KPI ──
+  var avg = data.total > 0 ? Math.round(data.totalAmount / data.total) : 0;
+  document.getElementById("billTotalAmt")  .textContent = "₹" + formatAmt(data.totalAmount);
+  document.getElementById("billTotalCount").textContent = data.total || 0;
+  document.getElementById("billAvgAmt")    .textContent = "₹" + formatAmt(avg);
+  document.getElementById("billKpiArea").style.display  = "block";
+
+  // ── Salesman Breakup ──
+  var sbHtml = "<div style='font-size:12px;font-weight:800;color:var(--blue);margin-bottom:10px'>💰 Amount by Team Member</div>";
+  var maxAmt  = data.salesman.length ? data.salesman[0].amount : 1;
+  data.salesman.forEach(function(s) {
+    var pct = maxAmt > 0 ? Math.round(s.amount / maxAmt * 100) : 0;
+    sbHtml +=
+      "<div class='salesman-bill-row'>" +
+        "<div>" +
+          "<div class='sbl-name'>👤 " + s.name + "</div>" +
+          "<div style='margin-top:4px'>" +
+            "<div style='background:#f0f0f0;border-radius:4px;height:6px;width:160px;overflow:hidden'>" +
+              "<div style='height:100%;width:" + pct + "%;background:linear-gradient(90deg,#e65100,#f57f17);border-radius:4px'></div>" +
+            "</div>" +
+          "</div>" +
+        "</div>" +
+        "<div class='sbl-right'>" +
+          "<div class='sbl-amt'>₹" + formatAmt(s.amount) + "</div>" +
+          "<div class='sbl-cnt'>" + s.count + " bill" + (s.count !== 1 ? "s" : "") + "</div>" +
+        "</div>" +
+      "</div>";
+  });
+  document.getElementById("billSalesmanBreakup").innerHTML = sbHtml;
+
+  // ── Monthly Breakup (only if not filtered to single month) ──
+  var mbEl = document.getElementById("billMonthlyBreakup");
+  if (data.monthly && data.monthly.length > 1) {
+    var mbHtml = "<div style='font-size:12px;font-weight:800;color:var(--blue);margin-bottom:10px'>📅 Monthly Breakup</div>";
+    var maxM   = Math.max.apply(null, data.monthly.map(function(m){ return m.amount; })) || 1;
+    data.monthly.forEach(function(m) {
+      var pct = Math.round(m.amount / maxM * 100);
+      mbHtml +=
+        "<div class='bar-row' style='margin-bottom:7px'>" +
+          "<div class='bar-label' style='width:58px;font-size:12px'>" + m.label + "</div>" +
+          "<div class='bar-track'>" +
+            "<div class='bar-fill' style='width:" + pct + "%;background:linear-gradient(90deg,#e65100,#f57f17)'>" +
+              "<span>₹" + formatAmt(m.amount) + "</span>" +
+            "</div>" +
+          "</div>" +
+          "<div class='bar-val' style='font-size:12px'>" + m.count + "</div>" +
+        "</div>";
+    });
+    mbEl.innerHTML = mbHtml;
+    mbEl.style.display = "block";
+  } else {
+    mbEl.style.display = "none";
+  }
+
+  // ── Export button ──
+  document.getElementById("billDownloadBtn").style.display =
+    billRecords.length > 0 ? "block" : "none";
+
+  // ── Records ──
+  var c = document.getElementById("billResults");
+  if (!billRecords.length) {
+    c.innerHTML = "<p style='text-align:center;color:#999;padding:20px'>No bills found for selected filters.</p>";
+    return;
+  }
+
+  var html = "<p style='font-size:12px;color:var(--muted);margin-bottom:8px'>" +
+             billRecords.length + " bill(s) found</p>";
+
+  billRecords.forEach(function(r, idx) {
+    var imgBtn = r.imageUrl
+      ? "<a href='" + r.imageUrl + "' target='_blank' class='bill-img-btn'>📷 View Bill Image</a>"
+      : "<span class='bill-no-img'>📷 No image uploaded</span>";
+
+    html +=
+      "<div class='bill-card'>" +
+        "<div class='bill-card-header'>" +
+          "<div>" +
+            "<div class='bill-name'>👤 " + (r.salesman || "—") + "</div>" +
+            "<div class='bill-meta'>📅 " + (r.date || "—") + "</div>" +
+          "</div>" +
+          "<div class='bill-amt'>₹" + formatAmt(r.amount) + "</div>" +
+        "</div>" +
+        imgBtn +
+      "</div>";
+  });
+
+  c.innerHTML = html;
+}
+
+function downloadBillCSV() {
+  if (!billRecords.length) return;
+  var headers = ["Date","Salesman","Amount (₹)","Image URL","Image Name"];
+  var rows    = [headers];
+  billRecords.forEach(function(r) {
+    rows.push([
+      '"' + r.date     + '"',
+      '"' + r.salesman + '"',
+      r.amount,
+      '"' + (r.imageUrl  || "") + '"',
+      '"' + (r.imageName || "") + '"'
+    ]);
+  });
+  var csv  = rows.map(function(r){ return r.join(","); }).join("\n");
+  var blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
+  var url  = URL.createObjectURL(blob);
+  var link = document.createElement("a");
+  link.href = url;
+  link.download = "RKT_PetrolBills_" + new Date().toISOString().slice(0,10) + ".csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// ════════════════════════════════════════════════════════════
+// SERVICE REPORT
+// ════════════════════════════════════════════════════════════
+var svcRecordsCache  = [];
+var svcYearsInited   = false;
+var svcUnlocked      = false;          // stays true for the whole session
+
+function checkServicePassword() {
+  var entered = document.getElementById("svcPasswordInput").value;
+  var errEl   = document.getElementById("svcPwdError");
+  if (entered === "220285") {
+    svcUnlocked = true;
+    document.getElementById("svcLockScreen").style.display = "none";
+    document.getElementById("svcContent").style.display    = "block";
+    errEl.style.display = "none";
+    initServiceYears();
+  } else {
+    errEl.style.display = "block";
+    document.getElementById("svcPasswordInput").value = "";
+    document.getElementById("svcPasswordInput").focus();
+    // shake animation
+    var inp = document.getElementById("svcPasswordInput");
+    inp.style.borderColor = "var(--red)";
+    inp.style.animation   = "none";
+    setTimeout(function(){ inp.style.borderColor = ""; }, 1500);
+  }
+}
+
+function toggleSvcPwd() {
+  var inp = document.getElementById("svcPasswordInput");
+  var eye = document.getElementById("svcPwdEye");
+  if (inp.type === "password") {
+    inp.type  = "text";
+    eye.textContent = "🙈";
+  } else {
+    inp.type  = "password";
+    eye.textContent = "👁️";
+  }
+}
+
+function initServiceYears() {
+  if (svcYearsInited) return;
+  svcYearsInited = true;
+  var yr    = new Date().getFullYear();
+  var yrSel = document.getElementById("svcYear");
+  for (var y = yr; y >= yr - 4; y--) {
+    var o = document.createElement("option");
+    o.value = y; o.text = y;
+    if (y === yr) o.selected = true;
+    yrSel.appendChild(o);
+  }
+  // default month = current
+  document.getElementById("svcMonth").value = new Date().getMonth() + 1;
+}
+
+function loadServiceReport() {
+  var filters = {
+    year:     document.getElementById("svcYear").value,
+    month:    document.getElementById("svcMonth").value,
+    mechanic: document.getElementById("svcMechanic").value,
+    status:   document.getElementById("svcStatus").value,
+    type:     document.getElementById("svcType").value
+  };
+
+  document.getElementById("svcResults").innerHTML = "<div class='spinner'>⏳ Loading service records...</div>";
+  document.getElementById("svcKpiArea").style.display  = "none";
+  document.getElementById("svcDownloadBtn").style.display = "none";
+
+  gasCall('getServiceData', { filters: filters }, renderServiceReport, function(e) {
+    document.getElementById("svcResults").innerHTML =
+      "<p style='color:red;padding:12px'>❌ Error: " + e.message + "</p>";
+  });
+}
+
+function renderServiceReport(data) {
+  svcRecordsCache = data.records || [];
+
+  // ── KPI Panel ──
+  document.getElementById("svcTotalCount")   .textContent = data.total || 0;
+  document.getElementById("svcPendingCount") .textContent = data.statusCount.Pending   || 0;
+  document.getElementById("svcCompletedCount").textContent= data.statusCount.Completed || 0;
+  document.getElementById("svcTotalBill")    .textContent = "₹" + formatAmt(data.totalBill);
+  document.getElementById("svcTotalPaid")    .textContent = "₹" + formatAmt(data.totalPaid);
+  document.getElementById("svcKpiArea").style.display = "block";
+
+  // ── Mechanic workload bars ──
+  var mc   = data.mechanicCount || {};
+  var mMax = Math.max.apply(null, Object.values(mc).concat([1]));
+  var mHtml= "<div style='font-size:12px;font-weight:800;color:var(--blue);margin-bottom:8px'>🔩 Mechanic Workload</div>";
+  mHtml += "<div class='bar-chart'>";
+  Object.keys(mc).forEach(function(m) {
+    var pct = Math.round(mc[m] / mMax * 100);
+    mHtml +=
+      "<div class='bar-row'>" +
+      "<div class='bar-label' style='width:64px;font-size:12px'>" + m + "</div>" +
+      "<div class='bar-track'><div class='bar-fill' style='width:" + pct + "%;background:linear-gradient(90deg,#1b5e20,#2e7d32)'>" +
+      "<span>" + mc[m] + "</span></div></div>" +
+      "<div class='bar-val'>" + mc[m] + "</div>" +
+      "</div>";
+  });
+  mHtml += "</div>";
+
+  // ── Type split ──
+  var tc = data.typeCount || {};
+  var tcTotal = (tc.Paid||0) + (tc.Free||0) + (tc.Breakdown||0);
+  if (tcTotal) {
+    mHtml += "<div style='display:flex;gap:7px;flex-wrap:wrap;margin-top:10px'>";
+    if (tc.Paid)      mHtml += "<span class='svc-badge sb-paid'>💰 Paid: "      + tc.Paid      + "</span>";
+    if (tc.Free)      mHtml += "<span class='svc-badge sb-free'>🆓 Free: "      + tc.Free      + "</span>";
+    if (tc.Breakdown) mHtml += "<span class='svc-badge sb-breakdown'>🚨 Breakdown: " + tc.Breakdown + "</span>";
+    mHtml += "</div>";
+  }
+
+  document.getElementById("svcMechanicBars").innerHTML = mHtml;
+
+  // ── Show/hide export button ──
+  document.getElementById("svcDownloadBtn").style.display =
+    svcRecordsCache.length > 0 ? "block" : "none";
+
+  // ── Records ──
+  var c = document.getElementById("svcResults");
+  if (!svcRecordsCache.length) {
+    c.innerHTML = "<p style='text-align:center;color:#999;padding:20px'>No service records found for selected filters.</p>";
+    return;
+  }
+
+  var html = "<p style='font-size:12px;color:var(--muted);margin-bottom:8px'>" +
+             svcRecordsCache.length + " record(s) found</p>";
+
+  svcRecordsCache.forEach(function(r) {
+    var isPending   = r.serviceStatus === "Pending";
+    var cardClass   = isPending ? "sc-pending" : "sc-completed";
+    var statusBadge = isPending
+      ? "<span class='svc-badge sb-pending'>⏳ Pending</span>"
+      : "<span class='svc-badge sb-completed'>✅ Completed</span>";
+
+    var typeBadge = "";
+    if (r.serviceType === "Paid")      typeBadge = "<span class='svc-badge sb-paid'>💰 Paid</span>";
+    if (r.serviceType === "Free")      typeBadge = "<span class='svc-badge sb-free'>🆓 Free</span>";
+    if (r.serviceType === "Breakdown") typeBadge = "<span class='svc-badge sb-breakdown'>🚨 Breakdown</span>";
+
+    var warrantyBadge = r.warranty === "In Warranty"
+      ? "<span class='svc-badge sb-warranty'>🛡️ In Warranty</span>"
+      : r.warranty ? "<span class='svc-badge sb-nowarranty'>⚠️ Out of Warranty</span>" : "";
+
+    html +=
+      "<div class='svc-card " + cardClass + "'>" +
+
+      // Header row
+      "<div style='display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px'>" +
+        "<div class='svc-name'>" + (r.customerName || "—") + "</div>" +
+        "<div>" + statusBadge + "</div>" +
+      "</div>" +
+
+      // Info rows
+      "<div class='svc-row'>📱 <strong>" + (r.mobile||"—") + "</strong>" +
+        " &nbsp; 🏘️ " + (r.village||"—") + "</div>" +
+      "<div class='svc-row'>🔩 Mechanic: <strong>" + (r.mechanic||"—") + "</strong>" +
+        " &nbsp; 📅 " + (r.serviceDate||r.date||"—") + "</div>" +
+      "<div class='svc-row'>🚜 Model: <strong>" + (r.model||"—") + "</strong>" +
+        " &nbsp; 🔑 Chasis: " + (r.chasis||"—") + "</div>" +
+      (r.hours ? "<div class='svc-row'>⏱️ Tractor Hours: <strong>" + r.hours + "</strong></div>" : "") +
+      (r.complaint ? "<div class='svc-row'>💬 <strong>Complaint:</strong> " + r.complaint + "</div>" : "") +
+
+      // Badges
+      "<div style='display:flex;gap:5px;flex-wrap:wrap;margin:7px 0 0'>" +
+        typeBadge + " " + warrantyBadge +
+      "</div>" +
+
+      // Amount row
+      (r.bill || r.payment ?
+        "<div class='svc-amount-row'>" +
+        "<div class='svc-amt'><span class='am-lbl'>Bill Amount</span>₹" + formatAmt(r.bill) + "</div>" +
+        "<div class='svc-amt' style='text-align:right'><span class='am-lbl'>Net Collected</span>₹" + formatAmt(r.payment) + "</div>" +
+        "</div>" : "") +
+
+      "</div>";
+  });
+
+  c.innerHTML = html;
+}
+
+function formatAmt(n) {
+  if (!n) return "0";
+  return Number(n).toLocaleString("en-IN");
+}
+
+function downloadServiceCSV() {
+  if (!svcRecordsCache.length) return;
+  var headers = [
+    "Date","Customer Name","Mobile","Village","Activity",
+    "Service Type","Complaint","Mechanic","Service Status",
+    "Service Date","Warranty","Model","Chasis No","Tractor Hours",
+    "Bill Amount","Net Payment"
+  ];
+  var rows = [headers];
+  svcRecordsCache.forEach(function(r) {
+    rows.push([
+      r.date,
+      '"' + (r.customerName||"").replace(/"/g,'""') + '"',
+      r.mobile,
+      '"' + (r.village||"").replace(/"/g,'""') + '"',
+      r.activityType,
+      r.serviceType,
+      '"' + (r.complaint||"").replace(/"/g,'""') + '"',
+      r.mechanic,
+      r.serviceStatus,
+      r.serviceDate,
+      r.warranty,
+      r.model,
+      r.chasis,
+      r.hours,
+      r.bill,
+      r.payment
+    ]);
+  });
+
+  var csv  = rows.map(function(r){ return r.join(","); }).join("\n");
+  var blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
+  var url  = URL.createObjectURL(blob);
+  var link = document.createElement("a");
+  link.href = url;
+  link.download = "RKT_ServiceReport_" + new Date().toISOString().slice(0,10) + ".csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// ════════════════════════════════════════════════════════════
+// PETROL BILL
+// ════════════════════════════════════════════════════════════
+var petrolImageBase64 = null;
+var petrolMimeType    = null;
+var petrolFileName    = null;
+
+function handlePetrolImage(input) {
+  if (!input.files || !input.files[0]) return;
+  var file   = input.files[0];
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var dataUrl = e.target.result;
+    // dataUrl = "data:image/jpeg;base64,/9j/..."
+    var parts      = dataUrl.split(",");
+    petrolMimeType = file.type;
+    petrolFileName = file.name;
+    petrolImageBase64 = parts[1]; // raw base64 only
+
+    document.getElementById("petrolPreview").src = dataUrl;
+    document.getElementById("petrolPreview").style.display = "block";
+    document.getElementById("petrolUploadPlaceholder").style.display = "none";
+    document.getElementById("petrolFileName").textContent = file.name;
+    document.getElementById("petrolFileName").style.display = "block";
+  };
+  reader.readAsDataURL(file);
+}
+
+function submitPetrolBill() {
+  var salesman = document.getElementById("petrolSalesman").value;
+  var amount   = document.getElementById("petrolAmount").value;
+
+  if (!salesman) { alert("Please select a team member."); return; }
+  if (!amount)   { alert("Please enter the amount."); return; }
+  if (!petrolImageBase64) { alert("Please upload a bill image."); return; }
+
+  var btn = document.getElementById("petrolSubmitBtn");
+  btn.disabled    = true;
+  btn.textContent = "⏳ Uploading...";
+
+  var banner = document.getElementById("petrolBanner");
+  banner.style.display = "none";
+
+  gasCall('savePetrolBill', { data: {
+      salesman:     salesman,
+      amount:       amount,
+      imageBase64:  petrolImageBase64,
+      mimeType:     petrolMimeType,
+      fileName:     petrolFileName
+    }}, function(msg) {
+      btn.disabled    = false;
+      btn.textContent = "⛽ Save Petrol Bill";
+      banner.className  = "banner banner-green";
+      banner.innerHTML  = "<b>✅ " + msg + "</b>";
+      banner.style.display = "block";
+      petrolImageBase64 = null; petrolMimeType = null; petrolFileName = null;
+      document.getElementById("petrolSalesman").value   = "";
+      document.getElementById("petrolAmount").value     = "";
+      document.getElementById("petrolImageInput").value = "";
+      document.getElementById("petrolPreview").style.display = "none";
+      document.getElementById("petrolUploadPlaceholder").style.display = "block";
+      document.getElementById("petrolFileName").style.display = "none";
+    }, function(e) {
+      btn.disabled    = false;
+      btn.textContent = "⛽ Save Petrol Bill";
+      banner.className  = "banner banner-orange";
+      banner.innerHTML  = "<b>❌ Error:</b> " + e.message;
+      banner.style.display = "block";
+    });
+}
+</script>
+</body>
+</html>
