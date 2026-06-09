@@ -1120,15 +1120,20 @@
       <div class="quote-box" id="quoteBox"></div>
 
       <!-- GPS FIELD INSTRUCTION BANNER -->
-      <div id="gpsInstructionBanner" style="background:linear-gradient(135deg,#e3f2fd,#bbdefb);border-left:4px solid #1565c0;border-radius:10px;padding:12px 14px;margin:8px 12px;font-size:13px;color:#0d47a1;">
-        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">📍 Field GPS Tracking Active</div>
-        <div style="line-height:1.7">
-          ✅ <b>Fill inquiry in the field only</b> — GPS captures your live location when you save.<br>
-          ⏱️ Your daily field hours are tracked automatically via save timestamps.<br>
-          🗺️ Location is saved village-wise and visible on the Field Map in Stats tab.<br>
-          <span style="color:#c62828;font-weight:600;">⚠️ Allow location permission when asked by browser.</span>
+      <div id="gpsInstructionBanner" style="background:linear-gradient(135deg,#e3f2fd,#bbdefb);border-left:4px solid #1565c0;border-radius:10px;padding:14px 14px;margin:8px 12px;font-size:14px;color:#0d47a1;">
+        <div style="font-weight:700;font-size:15px;margin-bottom:8px;">📍 लाइव लोकेशन ट्रैकिंग चालू है</div>
+        <div style="line-height:2.0">
+          ✅ <b>फॉर्म सिर्फ खेत / ग्राहक के पास भरें</b> — सेव करते समय आपकी लोकेशन अपने आप सेव होगी।<br>
+          🔧 <b>मैकेनिक भाई</b> — सर्विस के समय फॉर्म भरें, आपकी जगह सेव होगी।<br>
+          ⏱️ आपके रोज के काम के घंटे अपने आप रिकॉर्ड होते हैं।<br>
+          🗺️ हर गाँव की जानकारी नक्शे पर दिखेगी।<br>
+          <span style="color:#c62828;font-weight:700;">⚠️ मोबाइल में लोकेशन की परमिशन दें — वरना सेव नहीं होगी लोकेशन।</span>
         </div>
-        <div id="gpsStatus" style="margin-top:8px;font-size:12px;color:#1565c0;font-weight:600;">📡 GPS: Ready</div>
+        <div style="margin-top:10px;background:#fff;border-radius:8px;padding:8px 10px;font-size:13px;">
+          <b>परमिशन कैसे दें:</b><br>
+          📱 जब फोन पूछे <b>"Allow location?"</b> → <b style="color:#2e7d32">Allow / हाँ</b> दबाएं
+        </div>
+        <div id="gpsStatus" style="margin-top:8px;font-size:13px;color:#1565c0;font-weight:700;">📡 लोकेशन: तैयार है</div>
       </div>
 
       <!-- AUTO STATUS ALERT -->
@@ -2406,17 +2411,17 @@ function submitForm() {
 
   var btn = document.getElementById("submitBtn");
   btn.disabled = true;
-  btn.textContent = "⏳ Getting GPS...";
+  btn.textContent = "📡 लोकेशन ले रहे हैं...";
 
   var gpsStatus = document.getElementById("gpsStatus");
 
   // ── Capture GPS then save ──────────────────────────────────
   function doSave() {
-    btn.textContent = "⏳ Saving...";
+    btn.textContent = "⏳ सेव हो रहा है...";
     gasCall('saveData', { data: data }, function(resp) {
       btn.disabled = false;
       btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
-      if (gpsStatus) gpsStatus.textContent = "📡 GPS: Ready";
+      if (gpsStatus) gpsStatus.textContent = "📡 लोकेशन: तैयार है";
       var again = confirm("✅ " + resp + "\n\nNew entry?");
       if (again) resetForm();
       else {
@@ -2434,26 +2439,25 @@ function submitForm() {
 
   // ── Try GPS → then save ─────────────────────────────────────
   if (navigator.geolocation) {
-    if (gpsStatus) gpsStatus.textContent = "📡 GPS: Locating...";
+    if (gpsStatus) gpsStatus.textContent = "📡 लोकेशन ढूंढ रहे हैं...";
     navigator.geolocation.getCurrentPosition(
       function(pos) {
         var lat = pos.coords.latitude.toFixed(6);
         var lng = pos.coords.longitude.toFixed(6);
-        data.gpsLat  = lat;
-        data.gpsLng  = lng;
+        data.gpsLat   = lat;
+        data.gpsLng   = lng;
         data.location = "https://maps.google.com/?q=" + lat + "," + lng;
-        if (gpsStatus) gpsStatus.textContent = "✅ GPS: " + lat + ", " + lng;
+        if (gpsStatus) gpsStatus.textContent = "✅ लोकेशन मिल गई — सेव हो रहा है";
         doSave();
       },
       function(err) {
-        // GPS failed/denied — save anyway without location
-        if (gpsStatus) gpsStatus.textContent = "⚠️ GPS unavailable — saving without location";
+        if (gpsStatus) gpsStatus.textContent = "⚠️ लोकेशन नहीं मिली — बिना लोकेशन सेव हो रहा है";
         doSave();
       },
       { timeout: 8000, maximumAge: 60000, enableHighAccuracy: true }
     );
   } else {
-    // Browser doesn't support GPS
+    if (gpsStatus) gpsStatus.textContent = "⚠️ यह फोन GPS को सपोर्ट नहीं करता";
     doSave();
   }
 }
