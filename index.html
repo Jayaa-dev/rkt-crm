@@ -939,33 +939,9 @@
 
 <!-- ── PWA SPLASH SCREEN ──────────────────────────────────── -->
 <div id="pwa-splash">
-  <!-- Same SVG logo on white card -->
-  <div style="background:#fff;border-radius:24px;padding:24px 32px;box-shadow:0 8px 40px rgba(0,0,0,0.25);margin-bottom:28px">
-    <svg viewBox="0 0 260 100" width="220" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="48" fill="#1a6b1a" stroke="#fff" stroke-width="2"/>
-      <circle cx="50" cy="28" r="10" fill="#f5a623"/>
-      <line x1="50" y1="10" x2="50" y2="16" stroke="#f5a623" stroke-width="2.5" stroke-linecap="round"/>
-      <line x1="32" y1="28" x2="36" y2="28" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
-      <line x1="64" y1="28" x2="68" y2="28" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
-      <line x1="37" y1="15" x2="40" y2="19" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
-      <line x1="63" y1="15" x2="60" y2="19" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
-      <ellipse cx="30" cy="68" rx="22" ry="12" fill="#2d8a2d"/>
-      <ellipse cx="70" cy="70" rx="20" ry="10" fill="#2d8a2d"/>
-      <ellipse cx="50" cy="72" rx="28" ry="9" fill="#34a034"/>
-      <rect x="28" y="56" width="26" height="14" rx="3" fill="#e8e8e8" stroke="#999" stroke-width="0.8"/>
-      <rect x="38" y="50" width="14" height="10" rx="2" fill="#d0d0d0" stroke="#aaa" stroke-width="0.8"/>
-      <circle cx="34" cy="72" r="7" fill="#555" stroke="#333" stroke-width="1"/>
-      <circle cx="34" cy="72" r="3.5" fill="#888"/>
-      <circle cx="50" cy="71" r="5.5" fill="#555" stroke="#333" stroke-width="1"/>
-      <circle cx="50" cy="71" r="2.5" fill="#888"/>
-      <rect x="42" y="45" width="3" height="6" rx="1" fill="#888"/>
-      <text x="110" y="42" font-family="Arial Black,Arial" font-weight="900" font-size="36" fill="#c62828" letter-spacing="-1">R</text>
-      <text x="136" y="42" font-family="Arial Black,Arial" font-weight="900" font-size="36" fill="#1565c0">K</text>
-      <text x="162" y="42" font-family="Arial Black,Arial" font-weight="900" font-size="36" fill="#e65100">T</text>
-      <path d="M104 52 Q182 48 258 54 Q258 72 258 72 Q182 76 104 72 Z" fill="#1a6b1a"/>
-      <text x="181" y="68" font-family="Arial Black,Arial" font-weight="900" font-size="16" fill="#fff" text-anchor="middle" letter-spacing="2">MOTORS</text>
-      <path d="M104 74 Q181 80 258 76" stroke="#e65100" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-    </svg>
+  <!-- Real RKT Motors logo -->
+  <div style="background:#fff;border-radius:24px;padding:20px 28px;box-shadow:0 8px 40px rgba(0,0,0,0.25);margin-bottom:28px">
+    <img src="icons/rkt-logo-original.png" alt="RKT Motors" style="width:240px;height:auto;display:block;">
   </div>
   <div class="splash-sub" style="color:rgba(255,255,255,0.9);font-size:15px;font-weight:700">Daily CRM System</div>
   <div class="splash-dots" style="margin-top:28px">
@@ -1030,46 +1006,7 @@
 
   <!-- ── HEADER ──────────────────────────────────────────── -->
   <div class="app-header">
-    <!-- RKT Motors Logo SVG (recreated from brand) -->
-    <svg class="logo-img" viewBox="0 0 260 100" xmlns="http://www.w3.org/2000/svg">
-      <!-- Circle emblem -->
-      <circle cx="50" cy="50" r="48" fill="#1a6b1a" stroke="#fff" stroke-width="2"/>
-      <!-- Sun rays -->
-      <circle cx="50" cy="28" r="10" fill="#f5a623"/>
-      <line x1="50" y1="10" x2="50" y2="16" stroke="#f5a623" stroke-width="2.5" stroke-linecap="round"/>
-      <line x1="50" y1="40" x2="50" y2="46" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
-      <line x1="32" y1="28" x2="36" y2="28" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
-      <line x1="64" y1="28" x2="68" y2="28" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
-      <line x1="37" y1="15" x2="40" y2="19" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
-      <line x1="60" y1="37" x2="63" y2="41" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
-      <line x1="63" y1="15" x2="60" y2="19" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
-      <line x1="37" y1="37" x2="40" y2="41" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>
-      <!-- Hills -->
-      <ellipse cx="30" cy="68" rx="22" ry="12" fill="#2d8a2d"/>
-      <ellipse cx="70" cy="70" rx="20" ry="10" fill="#2d8a2d"/>
-      <ellipse cx="50" cy="72" rx="28" ry="9" fill="#34a034"/>
-      <!-- Tractor body -->
-      <rect x="28" y="56" width="26" height="14" rx="3" fill="#e8e8e8" stroke="#999" stroke-width="0.8"/>
-      <rect x="38" y="50" width="14" height="10" rx="2" fill="#d0d0d0" stroke="#aaa" stroke-width="0.8"/>
-      <!-- Tractor wheels -->
-      <circle cx="34" cy="72" r="7" fill="#555" stroke="#333" stroke-width="1"/>
-      <circle cx="34" cy="72" r="3.5" fill="#888"/>
-      <circle cx="50" cy="71" r="5.5" fill="#555" stroke="#333" stroke-width="1"/>
-      <circle cx="50" cy="71" r="2.5" fill="#888"/>
-      <!-- Exhaust -->
-      <rect x="42" y="45" width="3" height="6" rx="1" fill="#888"/>
-      <!-- Outer ring highlight -->
-      <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="2"/>
-      <!-- RKT text -->
-      <text x="110" y="42" font-family="Arial Black,Arial" font-weight="900" font-size="36" fill="#c62828" letter-spacing="-1">R</text>
-      <text x="136" y="42" font-family="Arial Black,Arial" font-weight="900" font-size="36" fill="#1565c0">K</text>
-      <text x="162" y="42" font-family="Arial Black,Arial" font-weight="900" font-size="36" fill="#e65100">T</text>
-      <!-- MOTORS banner -->
-      <path d="M104 52 Q182 48 258 54 Q258 72 258 72 Q182 76 104 72 Z" fill="#1a6b1a"/>
-      <text x="181" y="68" font-family="Arial Black,Arial" font-weight="900" font-size="16" fill="#fff" text-anchor="middle" letter-spacing="2">MOTORS</text>
-      <!-- Swash line -->
-      <path d="M104 74 Q181 80 258 76" stroke="#e65100" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-    </svg>
+    <img src="icons/rkt-logo-original.png" class="logo-img" alt="RKT Motors" style="height:52px;width:auto;object-fit:contain;">
 
     <div class="header-text">
       <h1>RKT MOTORS</h1>
