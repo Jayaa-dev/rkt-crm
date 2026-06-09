@@ -36,13 +36,55 @@
   // e.g. 'https://script.google.com/macros/s/AKfy.../exec'
   // ════════════════════════════════════════════════════════════
 
-  // ── Register Service Worker (enables PWA install) ─────────
+  // ── Register Service Worker + Auto-update detection ────────
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
       navigator.serviceWorker.register('/rkt-crm/sw.js')
-        .then(function(r) { console.log('SW registered:', r.scope); })
+        .then(function(reg) {
+          console.log('SW registered:', reg.scope);
+
+          // Check for updates every 60 seconds (while app is open)
+          setInterval(function() { reg.update(); }, 60000);
+
+          // Detect when a new SW is waiting
+          reg.addEventListener('updatefound', function() {
+            var newWorker = reg.installing;
+            newWorker.addEventListener('statechange', function() {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                showUpdateBanner();
+              }
+            });
+          });
+        })
         .catch(function(e) { console.log('SW error:', e); });
+
+      // Listen for SW_UPDATED message from service worker
+      navigator.serviceWorker.addEventListener('message', function(e) {
+        if (e.data && e.data.type === 'SW_UPDATED') {
+          showUpdateBanner();
+        }
+      });
     });
+  }
+
+  function showUpdateBanner() {
+    // Don't show twice
+    if (document.getElementById('swUpdateBanner')) return;
+    var banner = document.createElement('div');
+    banner.id  = 'swUpdateBanner';
+    banner.style.cssText =
+      'position:fixed;bottom:0;left:0;right:0;z-index:9999;' +
+      'background:#1565c0;color:#fff;padding:14px 16px;' +
+      'display:flex;align-items:center;justify-content:space-between;' +
+      'box-shadow:0 -4px 16px rgba(0,0,0,0.3);font-size:14px;font-weight:600;';
+    banner.innerHTML =
+      '<span>🔄 नया अपडेट आया है!</span>' +
+      '<button onclick="window.location.reload(true)" style="' +
+        'background:#fff;color:#1565c0;border:none;border-radius:8px;' +
+        'padding:8px 18px;font-weight:700;font-size:14px;cursor:pointer;">' +
+        'अभी अपडेट करें' +
+      '</button>';
+    document.body.appendChild(banner);
   }
 
   // ── gasCall() — replaces all google.script.run calls ──────
