@@ -559,6 +559,7 @@
     .badge-closed        { background: #ede7f6; color: #4527a0; }
     .badge-cancelled     { background: #fce4ec; color: #880e4f; }
     .badge-notinterested { background: #f5f5f5; color: #616161; }
+    .badge-saleslost     { background: #fbe9e7; color: #bf360c; }
 
     /* ── ATTENDANCE ───────────────────────────────────────── */
     .att-filters { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -1194,14 +1195,13 @@
               <label>Enquiry Status</label>
               <select id="enquiryType">
                 <option value="">Select</option>
-                <option>Hot</option>
-                <option>Warm</option>
-                <option>Cold</option>
-                <option>Contacted</option>
-                <option>Delivered</option>
-                <option>Closed</option>
-                <option>Cancelled</option>
-                <option>Not Interested</option>
+                <option value="Hot">🔴 Hot – Interested within 30 days</option>
+                <option value="Warm">🟡 Warm – Interested in 31–60 days</option>
+                <option value="Cold">🔵 Cold – After 60 days</option>
+                <option value="Contacted">🟢 Contacted – Details sharing</option>
+                <option value="Delivered">✅ Delivered – Swaraj TR delivered</option>
+                <option value="Closed">🔒 Closed – Not interested / No reply</option>
+                <option value="Sales Lost">❌ Sales Lost – Competition delivery</option>
               </select>
             </div>
             <div class="field">
@@ -1477,10 +1477,13 @@
             <label>Status</label>
             <select id="searchStatus">
               <option value="All">All</option>
-              <option>Hot</option><option>Warm</option>
-              <option>Cold</option><option>Contacted</option>
-              <option>Delivered</option><option>Closed</option>
-              <option>Cancelled</option><option>Not Interested</option>
+              <option value="Hot">🔴 Hot</option>
+              <option value="Warm">🟡 Warm</option>
+              <option value="Cold">🔵 Cold</option>
+              <option value="Contacted">🟢 Contacted</option>
+              <option value="Delivered">✅ Delivered</option>
+              <option value="Closed">🔒 Closed</option>
+              <option value="Sales Lost">❌ Sales Lost</option>
             </select>
           </div>
         </div>
@@ -2442,7 +2445,8 @@ function statusBadge(s) {
   var cls = {
     "Hot":"badge-hot","Warm":"badge-warm","Cold":"badge-cold","Contacted":"badge-contacted",
     "Delivered":"badge-delivered","Closed":"badge-closed",
-    "Cancelled":"badge-cancelled","Not Interested":"badge-notinterested"
+    "Cancelled":"badge-cancelled","Not Interested":"badge-notinterested",
+    "Sales Lost":"badge-saleslost"
   };
   return "<span class='badge " + (cls[s]||"badge-warm") + "'>" + (s||"—") + "</span>";
 }
@@ -2545,14 +2549,15 @@ function renderAttendance(data) {
 // DASHBOARD
 // ════════════════════════════════════════════════════════════
 var DASH_COLORS = {
-  Hot:            "#c62828",
-  Warm:           "#f57f17",
-  Cold:           "#1565c0",
-  Contacted:      "#2e7d32",
-  Delivered:      "#1b5e20",
-  Closed:         "#4527a0",
-  Cancelled:      "#880e4f",
-  "Not Interested": "#616161"
+  Hot:          "#c62828",
+  Warm:         "#f57f17",
+  Cold:         "#1565c0",
+  Contacted:    "#2e7d32",
+  Delivered:    "#1b5e20",
+  Closed:       "#4527a0",
+  Cancelled:    "#880e4f",
+  "Not Interested": "#616161",
+  "Sales Lost": "#bf360c"
 };
 var drillRecords  = [];   // holds current drill-down records for CSV export
 var activeFilters = {};   // last applied filters
