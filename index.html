@@ -2202,6 +2202,7 @@ function showTab(tab) {
     document.getElementById("tab-" + t).classList.toggle("active", t === tab);
   });
   if (tab === "dashboard") loadFilterOptions();
+  if (tab === "daily") autoStartGPS();
   if (tab === "fieldmap") {
     if (mapUnlocked) {
       document.getElementById("mapLockScreen").style.display = "none";
@@ -2372,7 +2373,70 @@ function editCustomer(rowNumber) {
 // ════════════════════════════════════════════════════════════
 // SUBMIT
 // ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// AUTO GPS — starts as soon as Daily tab opens
+// Pre-fetches location so save is instant
+// ════════════════════════════════════════════════════════════
+var _cachedGPS = null; // { lat, lng, location, time }
+
+function autoStartGPS() {
+  var gpsStatus = document.getElementById("gpsStatus");
+  if (!navigator.geolocation) {
+    if (gpsStatus) { gpsStatus.textContent = "⚠️ GPS सपोर्ट नहीं इस डिवाइस में"; gpsStatus.style.color = "#e65100"; }
+    return;
+  }
+  if (gpsStatus) { gpsStatus.textContent = "📡 लोकेशन ढूंढ रहे हैं..."; gpsStatus.style.color = "#1565c0"; }
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      var lat = pos.coords.latitude.toFixed(6);
+      var lng = pos.coords.longitude.toFixed(6);
+      _cachedGPS = { lat: lat, lng: lng, location: "https://maps.google.com/?q=" + lat + "," + lng, time: new Date().toISOString() };
+      if (gpsStatus) { gpsStatus.textContent = "✅ लोकेशन मिल गई (" + lat + ", " + lng + ")"; gpsStatus.style.color = "#2e7d32"; }
+    },
+    function(err) {
+      _cachedGPS = null;
+      var reason = err.code === 1 ? "परमिशन नहीं दी" : err.code === 2 ? "GPS सिग्नल नहीं" : "टाइमआउट";
+      if (gpsStatus) { gpsStatus.textContent = "⚠️ लोकेशन नहीं मिली — " + reason; gpsStatus.style.color = "#e65100"; }
+    },
+    { timeout: 10000, maximumAge: 30000, enableHighAccuracy: true }
+  );
+}
+
 function submitForm() {
+  // ── Mandatory field validation ────────────────────────────
+  var mobile   = getVal("mobile");
+  var salesman = getVal("salesman");
+  var village  = getVal("village");
+  var custName = getVal("customerName");
+
+  if (!mobile || mobile.length !== 10) {
+    showToast("❌ मोबाइल नंबर 10 अंक का होना चाहिए", 3000, "#c62828");
+    document.getElementById("mobile").focus();
+    return;
+  }
+  if (!salesman || salesman.trim() === '') {
+    showToast("❌ सेल्समैन का नाम जरूरी है — कृपया चुनें", 3000, "#c62828");
+    document.getElementById("salesman").focus();
+    return;
+  }
+  if (!village || village.trim() === '') {
+    showToast("❌ गांव/शहर का नाम जरूरी है", 3000, "#c62828");
+    document.getElementById("village").focus();
+    return;
+  }
+  if (!custName || custName.trim() === '') {
+    showToast("❌ ग्राहक का नाम जरूरी है", 3000, "#c62828");
+    document.getElementById("customerName").focus();
+    return;
+  }
+  var actType = getVal("activityType");
+  if (!actType || actType.trim() === '') {
+    showToast("❌ एक्टिविटी टाइप जरूरी है — Field / Demo / Calling आदि चुनें", 3000, "#c62828");
+    document.getElementById("activityType").focus();
+    return;
+  }
+  // ── End validation ────────────────────────────────────────
+
   var brands = [], usages = [], types = [];
   document.querySelectorAll(".brand:checked")        .forEach(function(e){ brands.push(e.value); });
   document.querySelectorAll(".usage:checked")        .forEach(function(e){ usages.push(e.value); });
@@ -2443,9 +2507,18 @@ function submitForm() {
   });
   } // end doSave
 
-  // ── Try GPS → then save ─────────────────────────────────────
-  if (navigator.geolocation) {
-    if (gpsStatus) gpsStatus.textContent = "📡 लोकेशन ढूंढ रहे हैं...";
+  // ── Use pre-fetched GPS (from autoStartGPS) → then save ────
+  if (_cachedGPS) {
+    // GPS already captured when tab opened — use it instantly
+    data.gpsLat   = _cachedGPS.lat;
+    data.gpsLng   = _cachedGPS.lng;
+    data.location = _cachedGPS.location;
+    data.gpsTime  = _cachedGPS.time;
+    if (gpsStatus) { gpsStatus.textContent = "✅ लोकेशन सेव हो रही है..."; gpsStatus.style.color = "#2e7d32"; }
+    doSave();
+  } else if (navigator.geolocation) {
+    // Cache missed — try one more time live
+    if (gpsStatus) { gpsStatus.textContent = "📡 लोकेशन ढूंढ रहे हैं..."; gpsStatus.style.color = "#1565c0"; }
     navigator.geolocation.getCurrentPosition(
       function(pos) {
         var lat = pos.coords.latitude.toFixed(6);
@@ -2453,19 +2526,16 @@ function submitForm() {
         data.gpsLat   = lat;
         data.gpsLng   = lng;
         data.location = "https://maps.google.com/?q=" + lat + "," + lng;
-        if (gpsStatus) gpsStatus.textContent = "✅ लोकेशन मिल गई — सेव हो रहा है";
+        if (gpsStatus) { gpsStatus.textContent = "✅ लोकेशन मिल गई — सेव हो रहा है"; gpsStatus.style.color = "#2e7d32"; }
         doSave();
       },
       function(err) {
         var reason = err.code === 1 ? "परमिशन नहीं दी" : err.code === 2 ? "GPS सिग्नल नहीं" : "टाइमआउट";
-        if (gpsStatus) {
-          gpsStatus.textContent = "⚠️ लोकेशन नहीं मिली (" + reason + ") — बिना लोकेशन सेव हो रहा है";
-          gpsStatus.style.color = "#e65100";
-        }
-        showToast("⚠️ लोकेशन नहीं मिली — हाजिरी लग रही है, नक्शे पर नहीं दिखेगा", 4000, "#e65100");
+        if (gpsStatus) { gpsStatus.textContent = "⚠️ लोकेशन नहीं मिली — " + reason; gpsStatus.style.color = "#e65100"; }
+        showToast("⚠️ लोकेशन नहीं मिली — हाजिरी लगेगी, नक्शे पर नहीं दिखेगा", 4000, "#e65100");
         doSave();
       },
-      { timeout: 8000, maximumAge: 60000, enableHighAccuracy: true }
+      { timeout: 8000, maximumAge: 30000, enableHighAccuracy: true }
     );
   } else {
     if (gpsStatus) { gpsStatus.textContent = "⚠️ GPS सपोर्ट नहीं — बिना लोकेशन सेव हो रहा है"; gpsStatus.style.color = "#e65100"; }
@@ -2488,6 +2558,8 @@ function newEntry() {
 
 function resetForm() {
   existingCustomer = false;
+  _cachedGPS = null; // clear GPS cache — will re-fetch on next save
+  autoStartGPS();    // immediately start fetching fresh location
 
   document.querySelectorAll("input:not([type='hidden'])").forEach(function(el) {
     if (el.type === "checkbox") el.checked = false;
