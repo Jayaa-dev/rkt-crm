@@ -1581,11 +1581,47 @@
         <button class="btn-primary" onclick="loadAttendance()">📊 Load Attendance</button>
       </div>
 
-      <!-- Admin bar (hidden until unlocked) -->
-      <div id="attAdminBar" style="display:none">
+      <!-- Admin Panel (hidden until unlocked) -->
+      <div id="attAdminPanel" style="display:none">
         <div class="admin-att-bar">
-          <span>🔐 Admin Mode — Calendar pe tap karke status badlein</span>
-          <button class="btn-admin-att" onclick="lockAttendanceAdmin()">🔒 Lock</button>
+          <span>🔐 Admin Mode चालू है</span>
+          <button class="btn-admin-att" onclick="lockAttendanceAdmin()">🔒 बंद करें</button>
+        </div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="card-title" style="font-size:15px">✏️ Attendance बदलें</div>
+          <div class="field-row">
+            <div class="field">
+              <label>Team Member</label>
+              <select id="adminAttSalesman">
+                <option value="">-- चुनें --</option>
+                <option>Abhishek</option><option>Shivdayal</option>
+                <option>Roduram</option><option>Hemraj</option>
+                <option>Sahil</option><option>Giriraj</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Date चुनें</label>
+              <input type="date" id="adminAttDate">
+            </div>
+          </div>
+          <button class="btn-primary" onclick="loadAdminAttDate()" style="margin-bottom:10px">📋 Status देखें</button>
+          <div id="adminAttCurrentStatus" style="display:none;background:#f5f5f5;border-radius:8px;padding:10px;margin-bottom:12px;font-size:14px;"></div>
+          <div id="adminAttButtons" style="display:none">
+            <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#555">नया Status चुनें:</div>
+            <div class="att-opt-grid">
+              <button class="att-opt-btn att-opt-present" onclick="saveAttOverride('present')">✅<span>Present</span></button>
+              <button class="att-opt-btn att-opt-halfday" onclick="saveAttOverride('halfday')">🌓<span>Half Day</span></button>
+              <button class="att-opt-btn att-opt-absent"  onclick="saveAttOverride('absent')">❌<span>Absent</span></button>
+              <button class="att-opt-btn att-opt-holiday" onclick="saveAttOverride('holiday')">🏖️<span>Holiday</span></button>
+              <button class="att-opt-btn att-opt-clear"   onclick="saveAttOverride('auto')" style="grid-column:span 2">🔄 Auto — Sheet Data से</button>
+            </div>
+          </div>
+        </div>
+        <!-- Change Log -->
+        <div class="card" style="margin-bottom:10px">
+          <div class="card-title" style="font-size:15px">📋 Change Log</div>
+          <button class="btn-refresh" onclick="loadAttLog()" style="margin-bottom:8px;width:100%">🔄 Log देखें</button>
+          <div id="attLogResults" style="font-size:13px;"></div>
         </div>
       </div>
       <div id="attAdminLockBar" style="margin:0 0 10px">
@@ -1593,22 +1629,6 @@
       </div>
 
       <div id="attResults"></div>
-    </div>
-
-    <!-- Attendance Override Modal -->
-    <div id="attOverrideModal" class="att-modal-overlay">
-      <div class="att-modal">
-        <h3>📅 Attendance बदलें</h3>
-        <p id="attModalLabel">Salesman — Date</p>
-        <div class="att-opt-grid">
-          <button class="att-opt-btn att-opt-present"  onclick="saveAttOverride('present') ">✅<span>Present</span></button>
-          <button class="att-opt-btn att-opt-halfday"  onclick="saveAttOverride('halfday') ">🌓<span>Half Day</span></button>
-          <button class="att-opt-btn att-opt-absent"   onclick="saveAttOverride('absent')  ">❌<span>Absent</span></button>
-          <button class="att-opt-btn att-opt-holiday"  onclick="saveAttOverride('holiday') ">🏖️<span>Holiday</span></button>
-          <button class="att-opt-btn att-opt-clear"    onclick="saveAttOverride('auto')    ">🔄 Auto (Sheet Data से)</button>
-        </div>
-        <button class="btn-modal-cancel" onclick="closeAttModal()">रद्द करें</button>
-      </div>
     </div>
 
     <!-- ════════════════════════════════════════════════════ -->
@@ -2747,56 +2767,119 @@ function loadAttendance() {
   });
 }
 
-var _attAdminUnlocked = false;
-var _attLastData      = null;
-var _attOverridePending = { salesman: null, dateKey: null };
+// ════════════════════════════════════════════════════════════
+// ADMIN ATTENDANCE
+// ════════════════════════════════════════════════════════════
+var _attAdminUnlocked   = false;
+var _attLastData        = null;
+var _attPending         = { salesman: null, dateKey: null, currentStatus: null };
+
+var STATUS_LABEL = { present:"✅ Present", halfday:"🌓 Half Day", absent:"❌ Absent", holiday:"🏖️ Holiday", auto:"🔄 Auto (Sheet)", sunday:"📅 Sunday", future:"—" };
+var STATUS_COLOR = { present:"#2e7d32", halfday:"#f57f17", absent:"#c62828", holiday:"#6a1b9a", auto:"#555", sunday:"#999" };
 
 function unlockAttendanceAdmin() {
   var pw = prompt("Admin Password डालें:");
   if (pw === "220285") {
     _attAdminUnlocked = true;
-    document.getElementById("attAdminBar").style.display     = "block";
-    document.getElementById("attAdminLockBar").style.display = "none";
-    showToast("🔓 Admin Mode चालू — calendar pe tap karke status badlein", 3000, "#1565c0");
-    if (_attLastData) renderAttendance(_attLastData);
+    document.getElementById("attAdminPanel").style.display    = "block";
+    document.getElementById("attAdminLockBar").style.display  = "none";
+    // Set today's date as default
+    var today = new Date();
+    var dd = String(today.getDate()).padStart(2,"0");
+    var mm = String(today.getMonth()+1).padStart(2,"0");
+    document.getElementById("adminAttDate").value = today.getFullYear() + "-" + mm + "-" + dd;
+    showToast("🔓 Admin Mode चालू", 2500, "#1565c0");
   } else if (pw !== null) {
     showToast("❌ गलत पासवर्ड", 2500, "#c62828");
   }
 }
+
 function lockAttendanceAdmin() {
   _attAdminUnlocked = false;
-  document.getElementById("attAdminBar").style.display     = "none";
+  document.getElementById("attAdminPanel").style.display   = "none";
   document.getElementById("attAdminLockBar").style.display = "block";
-  if (_attLastData) renderAttendance(_attLastData);
   showToast("🔒 Admin Mode बंद", 2000, "#555");
 }
 
-function openAttModal(salesman, dateKey, currentStatus) {
-  if (!_attAdminUnlocked) return;
-  _attOverridePending = { salesman: salesman, dateKey: dateKey };
-  var parts = dateKey.split("-");
-  var d     = new Date(parts[0], parts[1]-1, parts[2]);
-  var mNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  document.getElementById("attModalLabel").textContent =
-    salesman + " — " + d.getDate() + " " + mNames[d.getMonth()] + " " + d.getFullYear() +
-    " (अभी: " + (currentStatus || "auto") + ")";
-  document.getElementById("attOverrideModal").classList.add("open");
+function loadAdminAttDate() {
+  var salesman = document.getElementById("adminAttSalesman").value;
+  var dateVal  = document.getElementById("adminAttDate").value;
+  if (!salesman) { showToast("❌ Team Member चुनें", 2000, "#c62828"); return; }
+  if (!dateVal)  { showToast("❌ Date चुनें", 2000, "#c62828"); return; }
+
+  // dateVal is YYYY-MM-DD
+  var parts    = dateVal.split("-");
+  var dateKey  = dateVal; // already YYYY-MM-DD
+  var dispDate = parts[2] + "-" + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(parts[1])-1] + "-" + parts[0];
+
+  // Look up status from last loaded attendance data
+  var currentStatus = "unknown";
+  if (_attLastData) {
+    var res = _attLastData.results.find(function(r){ return r.salesman === salesman; });
+    if (res && res.dayStatus[dateKey]) currentStatus = res.dayStatus[dateKey];
+  }
+
+  _attPending = { salesman: salesman, dateKey: dateKey, currentStatus: currentStatus };
+
+  var statusDiv = document.getElementById("adminAttCurrentStatus");
+  statusDiv.style.display = "block";
+  statusDiv.innerHTML =
+    "<b>" + salesman + "</b> — <b>" + dispDate + "</b><br>" +
+    "अभी का Status: <span style='font-weight:800;color:" + (STATUS_COLOR[currentStatus]||"#333") + "'>" + (STATUS_LABEL[currentStatus]||currentStatus) + "</span>";
+
+  document.getElementById("adminAttButtons").style.display = "block";
 }
-function closeAttModal() {
-  document.getElementById("attOverrideModal").classList.remove("open");
-  _attOverridePending = { salesman: null, dateKey: null };
-}
+
 function saveAttOverride(status) {
-  var s = _attOverridePending.salesman;
-  var d = _attOverridePending.dateKey;
-  if (!s || !d) return;
-  closeAttModal();
+  var s = _attPending.salesman;
+  var d = _attPending.dateKey;
+  if (!s || !d) { showToast("❌ पहले Member और Date चुनें", 2000, "#c62828"); return; }
+
   showToast("⏳ सेव हो रहा है...", 1500, "#1565c0");
+  document.getElementById("adminAttButtons").style.display = "none";
+
   gasCall('saveAttOverride', { salesman: s, dateKey: d, status: status }, function(res) {
-    showToast("✅ " + s + " — " + d + " → " + status, 3000, "#2e7d32");
-    loadAttendance(); // refresh
+    var parts    = d.split("-");
+    var dispDate = parts[2] + "-" + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(parts[1])-1] + "-" + parts[0];
+    showToast("✅ " + s + " — " + dispDate + " → " + (STATUS_LABEL[status]||status), 3500, "#2e7d32");
+
+    // Update current status display
+    var statusDiv = document.getElementById("adminAttCurrentStatus");
+    statusDiv.innerHTML =
+      "<b>" + s + "</b> — <b>" + dispDate + "</b><br>" +
+      "नया Status: <span style='font-weight:800;color:" + (STATUS_COLOR[status]||"#333") + "'>" + (STATUS_LABEL[status]||status) + "</span> ✅ Saved";
+
+    _attPending.currentStatus = status;
+    loadAttendance(); // refresh calendar
   }, function(e) {
     showToast("❌ Error: " + e.message, 3000, "#c62828");
+    document.getElementById("adminAttButtons").style.display = "block";
+  });
+}
+
+function loadAttLog() {
+  document.getElementById("attLogResults").innerHTML = "⏳ लोड हो रहा है...";
+  gasCall('getAttLog', {}, function(rows) {
+    if (!rows || !rows.length) {
+      document.getElementById("attLogResults").innerHTML = "<p style='color:#999'>कोई बदलाव नहीं मिला।</p>";
+      return;
+    }
+    var html = "<table style='width:100%;border-collapse:collapse;font-size:12px'>" +
+      "<tr style='background:#f0f4ff;font-weight:700'><td style='padding:6px'>Member</td><td>Date</td><td>Status</td><td>समय</td></tr>";
+    rows.forEach(function(r, i) {
+      var bg = i % 2 === 0 ? "#fff" : "#f9f9f9";
+      var stColor = STATUS_COLOR[r.status] || "#333";
+      html += "<tr style='background:" + bg + "'>" +
+        "<td style='padding:5px 6px;font-weight:700'>" + r.salesman + "</td>" +
+        "<td style='padding:5px 6px'>" + r.dateKey + "</td>" +
+        "<td style='padding:5px 6px;color:" + stColor + ";font-weight:700'>" + (STATUS_LABEL[r.status]||r.status) + "</td>" +
+        "<td style='padding:5px 6px;color:#888'>" + r.updatedAt + "</td>" +
+        "</tr>";
+    });
+    html += "</table>";
+    document.getElementById("attLogResults").innerHTML = html;
+  }, function(e) {
+    document.getElementById("attLogResults").innerHTML = "<p style='color:red'>Error: " + e.message + "</p>";
   });
 }
 
@@ -2841,12 +2924,9 @@ function renderAttendance(data) {
     for (var b = 0; b < firstDow; b++) cal += "<div class='cal-day day-empty'></div>";
     data.calendar.forEach(function(c2) {
       var st  = r.dayStatus[c2.dateKey] || "future";
-      var cls = (statusClass[st] || "day-future") + (_attAdminUnlocked && st !== "sunday" ? " day-admin-edit" : "");
+      var cls = statusClass[st] || "day-future";
       var lbl = statusLabel[st] || "";
-      var onclick = _attAdminUnlocked && st !== "sunday"
-        ? " onclick=\"openAttModal('" + r.salesman + "','" + c2.dateKey + "','" + st + "')\""
-        : "";
-      cal += "<div class='cal-day " + cls + "'" + onclick + "><span class='dn'>" + c2.day + "</span><span class='dl'>" + lbl + "</span></div>";
+      cal += "<div class='cal-day " + cls + "'><span class='dn'>" + c2.day + "</span><span class='dl'>" + lbl + "</span></div>";
     });
     cal += "</div>";
 
