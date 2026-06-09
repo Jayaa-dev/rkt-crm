@@ -9,6 +9,8 @@
 
   <!-- ── REAL PWA MANIFEST ────────────────────────────────── -->
   <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <!-- ── PWA THEME ────────────────────────────────────────── -->
   <meta name="theme-color" content="#1565c0">
@@ -1102,6 +1104,9 @@
     <button id="tab-bills"     class="tab-btn"          onclick="showTab('bills')">
       <span class="tab-icon">🧾</span>Bills
     </button>
+    <button id="tab-fieldmap"  class="tab-btn"          onclick="showTab('fieldmap')">
+      <span class="tab-icon">🗺️</span>Map
+    </button>
   </div>
 
   <!-- ── SCROLLABLE AREA ─────────────────────────────────── -->
@@ -1113,6 +1118,18 @@
     <div id="section-daily" class="section active">
 
       <div class="quote-box" id="quoteBox"></div>
+
+      <!-- GPS FIELD INSTRUCTION BANNER -->
+      <div id="gpsInstructionBanner" style="background:linear-gradient(135deg,#e3f2fd,#bbdefb);border-left:4px solid #1565c0;border-radius:10px;padding:12px 14px;margin:8px 12px;font-size:13px;color:#0d47a1;">
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">📍 Field GPS Tracking Active</div>
+        <div style="line-height:1.7">
+          ✅ <b>Fill inquiry in the field only</b> — GPS captures your live location when you save.<br>
+          ⏱️ Your daily field hours are tracked automatically via save timestamps.<br>
+          🗺️ Location is saved village-wise and visible on the Field Map in Stats tab.<br>
+          <span style="color:#c62828;font-weight:600;">⚠️ Allow location permission when asked by browser.</span>
+        </div>
+        <div id="gpsStatus" style="margin-top:8px;font-size:12px;color:#1565c0;font-weight:600;">📡 GPS: Ready</div>
+      </div>
 
       <!-- AUTO STATUS ALERT -->
       <div id="autoStatusAlert" class="banner banner-orange">
@@ -1706,6 +1723,51 @@
     </div><!-- /section-dashboard -->
 
     <!-- ════════════════════════════════════════════════════ -->
+    <!--  FIELD MAP                                           -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-fieldmap" class="section">
+      <div class="card" style="padding:12px;margin-bottom:10px">
+        <div class="card-title">🗺️ Field GPS Map</div>
+        <div class="field-row">
+          <div class="field">
+            <label>Salesman</label>
+            <select id="mapSalesman">
+              <option value="All">All</option>
+              <option>Abhishek</option><option>Shivdayal</option>
+              <option>Roduram</option><option>Hemraj</option>
+              <option>Sahil</option><option>Giriraj</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select id="mapStatus">
+              <option value="All">All</option>
+              <option value="Hot">🔴 Hot</option>
+              <option value="Warm">🟡 Warm</option>
+              <option value="Cold">🔵 Cold</option>
+              <option value="Contacted">🟢 Contacted</option>
+              <option value="Delivered">✅ Delivered</option>
+              <option value="Closed">🔒 Closed</option>
+              <option value="Sales Lost">❌ Sales Lost</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn-primary" onclick="loadFieldMap()" style="margin-top:8px">🗺️ Load Map</button>
+      </div>
+
+      <!-- Village-wise summary cards -->
+      <div id="mapVillageSummary" style="padding:0 12px"></div>
+
+      <!-- Leaflet Map -->
+      <div id="mapContainer" style="height:400px;border-radius:12px;overflow:hidden;margin:10px 12px;display:none">
+        <div id="leafletMap" style="height:100%;width:100%"></div>
+      </div>
+
+      <!-- Village list table -->
+      <div id="mapVillageTable" style="padding:0 12px 20px"></div>
+    </div><!-- /section-fieldmap -->
+
+    <!-- ════════════════════════════════════════════════════ -->
     <!--  SERVICE REPORT                                      -->
     <!-- ════════════════════════════════════════════════════ -->
 
@@ -2134,7 +2196,7 @@ window.onload = function() {
 // TABS
 // ════════════════════════════════════════════════════════════
 function showTab(tab) {
-  ["daily","search","attendance","petrol","dashboard","service","bills"].forEach(function(t) {
+  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap"].forEach(function(t) {
     document.getElementById("section-" + t).classList.toggle("active", t === tab);
     document.getElementById("tab-" + t).classList.toggle("active", t === tab);
   });
@@ -2325,6 +2387,10 @@ function submitForm() {
     land:           getVal("land"),
     remark:         getVal("newRemark"),
     location:       "",
+    gpsLat:         "",
+    gpsLng:         "",
+    gpsVillage:     getVal("village"),
+    gpsTime:        new Date().toISOString(),
     serviceType:        getVal("serviceType"),
     serviceComplaint:   getVal("serviceComplaint"),
     mechanicName:       getVal("mechanicName"),
@@ -2340,11 +2406,17 @@ function submitForm() {
 
   var btn = document.getElementById("submitBtn");
   btn.disabled = true;
-  btn.textContent = "⏳ Saving...";
+  btn.textContent = "⏳ Getting GPS...";
 
-  gasCall('saveData', { data: data }, function(resp) {
+  var gpsStatus = document.getElementById("gpsStatus");
+
+  // ── Capture GPS then save ──────────────────────────────────
+  function doSave() {
+    btn.textContent = "⏳ Saving...";
+    gasCall('saveData', { data: data }, function(resp) {
       btn.disabled = false;
       btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
+      if (gpsStatus) gpsStatus.textContent = "📡 GPS: Ready";
       var again = confirm("✅ " + resp + "\n\nNew entry?");
       if (again) resetForm();
       else {
@@ -2358,6 +2430,32 @@ function submitForm() {
       btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
       alert("❌ Error: " + e.message);
   });
+  } // end doSave
+
+  // ── Try GPS → then save ─────────────────────────────────────
+  if (navigator.geolocation) {
+    if (gpsStatus) gpsStatus.textContent = "📡 GPS: Locating...";
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        var lat = pos.coords.latitude.toFixed(6);
+        var lng = pos.coords.longitude.toFixed(6);
+        data.gpsLat  = lat;
+        data.gpsLng  = lng;
+        data.location = "https://maps.google.com/?q=" + lat + "," + lng;
+        if (gpsStatus) gpsStatus.textContent = "✅ GPS: " + lat + ", " + lng;
+        doSave();
+      },
+      function(err) {
+        // GPS failed/denied — save anyway without location
+        if (gpsStatus) gpsStatus.textContent = "⚠️ GPS unavailable — saving without location";
+        doSave();
+      },
+      { timeout: 8000, maximumAge: 60000, enableHighAccuracy: true }
+    );
+  } else {
+    // Browser doesn't support GPS
+    doSave();
+  }
 }
 
 function getVal(id) {
@@ -3736,6 +3834,150 @@ function submitPetrolBill() {
       banner.innerHTML  = "<b>❌ Error:</b> " + e.message;
       banner.style.display = "block";
     });
+}
+
+// ════════════════════════════════════════════════════════════
+// FIELD MAP — Village-wise GPS tracking
+// ════════════════════════════════════════════════════════════
+var leafletMap  = null;
+var mapMarkers  = [];
+
+var STATUS_COLORS = {
+  "Hot":        "#c62828",
+  "Warm":       "#f57f17",
+  "Cold":       "#1565c0",
+  "Contacted":  "#2e7d32",
+  "Delivered":  "#1b5e20",
+  "Closed":     "#4527a0",
+  "Sales Lost": "#bf360c"
+};
+
+function loadFieldMap() {
+  var salesman = document.getElementById("mapSalesman").value;
+  var status   = document.getElementById("mapStatus").value;
+
+  document.getElementById("mapVillageSummary").innerHTML =
+    "<div class='spinner' style='padding:20px;text-align:center'>⏳ Loading GPS data...</div>";
+  document.getElementById("mapContainer").style.display = "none";
+  document.getElementById("mapVillageTable").innerHTML  = "";
+
+  gasCall('getGpsData', { filters: { salesman: salesman, status: status } },
+    function(data) { renderFieldMap(data); },
+    function(e)    {
+      document.getElementById("mapVillageSummary").innerHTML =
+        "<p style='color:red;padding:12px'>❌ Error: " + e.message + "</p>";
+    }
+  );
+}
+
+function renderFieldMap(data) {
+  var summaryEl = document.getElementById("mapVillageSummary");
+  var tableEl   = document.getElementById("mapVillageTable");
+
+  if (!data || data.total === 0) {
+    summaryEl.innerHTML = "<div class='card' style='text-align:center;padding:20px;color:#999'>" +
+      "📍 No GPS data found.<br><small>GPS is captured when a record is saved from the field.</small></div>";
+    return;
+  }
+
+  // ── Summary KPI strip ──
+  summaryEl.innerHTML =
+    "<div style='display:flex;gap:10px;padding:10px 0;overflow-x:auto'>" +
+    "<div class='card' style='min-width:110px;text-align:center;padding:12px'>" +
+      "<div style='font-size:22px;font-weight:700;color:#1565c0'>" + data.total + "</div>" +
+      "<div style='font-size:11px;color:#666'>GPS Records</div></div>" +
+    "<div class='card' style='min-width:110px;text-align:center;padding:12px'>" +
+      "<div style='font-size:22px;font-weight:700;color:#2e7d32'>" + data.villages.length + "</div>" +
+      "<div style='font-size:11px;color:#666'>Villages</div></div>" +
+    "</div>";
+
+  // ── Initialize Leaflet map ──
+  document.getElementById("mapContainer").style.display = "block";
+
+  if (leafletMap) {
+    leafletMap.remove();
+    leafletMap = null;
+  }
+
+  // Center on first point
+  var centerLat = data.points[0].lat;
+  var centerLng = data.points[0].lng;
+
+  leafletMap = L.map('leafletMap').setView([centerLat, centerLng], 11);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(leafletMap);
+
+  // ── Add village cluster markers ──
+  data.villages.forEach(function(v) {
+    var topStatus = Object.keys(v.statuses).sort(function(a,b){
+      return v.statuses[b] - v.statuses[a];
+    })[0] || "Cold";
+    var color = STATUS_COLORS[topStatus] || "#1565c0";
+
+    var icon = L.divIcon({
+      className: '',
+      html: '<div style="background:' + color + ';color:#fff;border-radius:50%;' +
+            'width:36px;height:36px;display:flex;align-items:center;justify-content:center;' +
+            'font-weight:700;font-size:13px;border:3px solid #fff;' +
+            'box-shadow:0 2px 6px rgba(0,0,0,0.4)">' + v.count + '</div>',
+      iconSize: [36, 36],
+      iconAnchor: [18, 18]
+    });
+
+    var popupHtml = "<b style='font-size:14px'>📍 " + v.village + "</b><br>" +
+      "<div style='margin-top:6px;font-size:12px'>";
+    Object.keys(v.statuses).forEach(function(s) {
+      var c = STATUS_COLORS[s] || "#666";
+      popupHtml += "<span style='color:" + c + ";font-weight:600'>" + s + ":</span> " +
+        v.statuses[s] + " &nbsp;";
+    });
+    popupHtml += "<br><b>Total: " + v.count + " customers</b>";
+    popupHtml += "<br><small style='color:#666'>Salesmen: ";
+    popupHtml += Object.keys(v.salesmen).join(", ") + "</small></div>";
+
+    L.marker([v.lat, v.lng], { icon: icon })
+      .addTo(leafletMap)
+      .bindPopup(popupHtml);
+  });
+
+  // ── Village-wise table ──
+  var html = "<div class='card-title' style='padding:10px 0 8px'>📋 Village-wise Summary</div>";
+  html += "<div style='overflow-x:auto'><table class='dash-table' style='font-size:13px'>";
+  html += "<tr><th>#</th><th>Village</th><th>Customers</th><th>Top Status</th><th>Salesmen</th><th>View</th></tr>";
+
+  data.villages.forEach(function(v, idx) {
+    var topStatus = Object.keys(v.statuses).sort(function(a,b){
+      return v.statuses[b] - v.statuses[a];
+    })[0] || "—";
+    var color = STATUS_COLORS[topStatus] || "#666";
+    var salesStr = Object.keys(v.salesmen).map(function(s) {
+      return s + "(" + v.salesmen[s] + ")";
+    }).join(", ");
+
+    html += "<tr>" +
+      "<td>" + (idx+1) + "</td>" +
+      "<td><b>" + v.village + "</b></td>" +
+      "<td style='text-align:center;font-weight:700'>" + v.count + "</td>" +
+      "<td><span style='color:" + color + ";font-weight:600'>" + topStatus + "</span></td>" +
+      "<td style='font-size:11px;color:#555'>" + salesStr + "</td>" +
+      "<td><a href='https://maps.google.com/?q=" + v.lat + "," + v.lng +
+        "' target='_blank' style='color:#1565c0;font-size:12px'>🗺️ Open</a></td>" +
+      "</tr>";
+  });
+  html += "</table></div>";
+  tableEl.innerHTML = html;
+
+  // Fit map to all markers
+  if (data.villages.length > 1) {
+    var lats = data.villages.map(function(v){ return v.lat; });
+    var lngs = data.villages.map(function(v){ return v.lng; });
+    leafletMap.fitBounds([
+      [Math.min.apply(null,lats), Math.min.apply(null,lngs)],
+      [Math.max.apply(null,lats), Math.max.apply(null,lngs)]
+    ], { padding: [30,30] });
+  }
 }
 </script>
 </body>
