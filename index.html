@@ -1127,7 +1127,8 @@
           🔧 <b>मैकेनिक भाई</b> — सर्विस के समय फॉर्म भरें, आपकी जगह सेव होगी।<br>
           ⏱️ आपके रोज के काम के घंटे अपने आप रिकॉर्ड होते हैं।<br>
           🗺️ हर गाँव की जानकारी नक्शे पर दिखेगी।<br>
-          <span style="color:#c62828;font-weight:700;">⚠️ मोबाइल में लोकेशन की परमिशन दें — वरना सेव नहीं होगी लोकेशन।</span>
+          ✅ <b>लोकेशन न मिले तो भी हाजिरी लगेगी</b> — डेटा सेव होगा, बस नक्शे पर नहीं दिखेगा।<br>
+          <span style="color:#c62828;font-weight:700;">⚠️ बेहतर होगा लोकेशन परमिशन दें — नक्शे पर गाँव दिखेगा।</span>
         </div>
         <div style="margin-top:10px;background:#fff;border-radius:8px;padding:8px 10px;font-size:13px;">
           <b>परमिशन कैसे दें:</b><br>
@@ -2421,7 +2422,7 @@ function submitForm() {
     gasCall('saveData', { data: data }, function(resp) {
       btn.disabled = false;
       btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
-      if (gpsStatus) gpsStatus.textContent = "📡 लोकेशन: तैयार है";
+      if (gpsStatus) { gpsStatus.textContent = "📡 लोकेशन: तैयार है"; gpsStatus.style.color = "#1565c0"; }
       var again = confirm("✅ " + resp + "\n\nNew entry?");
       if (again) resetForm();
       else {
@@ -2451,7 +2452,14 @@ function submitForm() {
         doSave();
       },
       function(err) {
-        if (gpsStatus) gpsStatus.textContent = "⚠️ लोकेशन नहीं मिली — बिना लोकेशन सेव हो रहा है";
+        if (gpsStatus) {
+          var reason = "";
+          if (err.code === 1) reason = "परमिशन नहीं दी";
+          else if (err.code === 2) reason = "GPS सिग्नल नहीं";
+          else reason = "टाइमआउट";
+          gpsStatus.textContent = "⚠️ लोकेशन नहीं मिली (" + reason + ") — हाजिरी लग रही है ✅";
+          gpsStatus.style.color = "#e65100";
+        }
         doSave();
       },
       { timeout: 8000, maximumAge: 60000, enableHighAccuracy: true }
