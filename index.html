@@ -2456,7 +2456,7 @@ function renderResults(results) {
   var html = "<p style='font-size:13px;color:#666;margin-bottom:8px'>" + results.length + " record(s) found</p>";
 
   results.forEach(function(r) {
-    var hasAuto = r.remark && r.remark.indexOf("[AUTO]") > -1;
+    var hasAuto = r.remark && String(r.remark).indexOf("[AUTO]") > -1;
     html +=
       "<div class='result-card'>" +
       "<div class='result-name'>" + (r.customerName||"—") + " " + statusBadge(r.enquiryType) + "</div>" +
