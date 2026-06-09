@@ -2500,7 +2500,9 @@ function submitForm() {
   var village  = getVal("village");
   var custName = getVal("customerName");
 
-  if (!mobile || mobile.length !== 10) {
+  var actTypeVal = getVal("activityType");
+  var isService  = actTypeVal === "Tractor Service-At Field" || actTypeVal === "Tractor Service-At Showroom";
+  if (!isService && (!mobile || mobile.length !== 10)) {
     showToast("❌ मोबाइल नंबर 10 अंक का होना चाहिए", 3000, "#c62828");
     document.getElementById("mobile").focus();
     return;
@@ -2870,7 +2872,10 @@ function saveAttOverride(status) {
     document.getElementById("attMonth").value    = month;
     document.getElementById("attYear").value     = year;
     document.getElementById("attSalesman").value = s;
-    loadAttendance(); // refresh calendar with correct month/year/salesman
+
+    // Wait 2 seconds for GAS sheet write to commit, then refresh calendar
+    showToast("⏳ Calendar अपडेट हो रहा है...", 2000, "#1565c0");
+    setTimeout(function() { loadAttendance(); }, 2000);
   }, function(e) {
     showToast("❌ Error: " + e.message, 3000, "#c62828");
     document.getElementById("adminAttButtons").style.display = "block";
