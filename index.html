@@ -1127,8 +1127,7 @@
           🔧 <b>मैकेनिक भाई</b> — सर्विस के समय फॉर्म भरें, आपकी जगह सेव होगी।<br>
           ⏱️ आपके रोज के काम के घंटे अपने आप रिकॉर्ड होते हैं।<br>
           🗺️ हर गाँव की जानकारी नक्शे पर दिखेगी।<br>
-          ✅ <b>लोकेशन न मिले तो भी हाजिरी लगेगी</b> — डेटा सेव होगा, बस नक्शे पर नहीं दिखेगा।<br>
-          <span style="color:#c62828;font-weight:700;">⚠️ बेहतर होगा लोकेशन परमिशन दें — नक्शे पर गाँव दिखेगा।</span>
+          <span style="color:#c62828;font-weight:700;">🚫 लोकेशन के बिना फॉर्म सेव नहीं होगा — लोकेशन ON करना जरूरी है।</span>
         </div>
         <div style="margin-top:10px;background:#fff;border-radius:8px;padding:8px 10px;font-size:13px;">
           <b>परमिशन कैसे दें:</b><br>
@@ -2452,21 +2451,29 @@ function submitForm() {
         doSave();
       },
       function(err) {
-        if (gpsStatus) {
-          var reason = "";
-          if (err.code === 1) reason = "परमिशन नहीं दी";
-          else if (err.code === 2) reason = "GPS सिग्नल नहीं";
-          else reason = "टाइमआउट";
-          gpsStatus.textContent = "⚠️ लोकेशन नहीं मिली (" + reason + ") — हाजिरी लग रही है ✅";
-          gpsStatus.style.color = "#e65100";
+        btn.disabled = false;
+        btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
+        var msg = "";
+        if (err.code === 1) {
+          msg = "❌ लोकेशन की परमिशन नहीं दी!\n\nफॉर्म सेव नहीं होगा।\n\n📱 परमिशन कैसे दें:\n1. ऊपर एड्रेस बार के पास 🔒 आइकन दबाएं\n2. Location → Allow करें\n3. पेज रिफ्रेश करें और फिर सेव करें";
+        } else if (err.code === 2) {
+          msg = "❌ GPS सिग्नल नहीं मिला!\n\nबाहर जाएं या कुछ देर बाद फिर कोशिश करें।\nफॉर्म सेव नहीं होगा।";
+        } else {
+          msg = "❌ लोकेशन टाइमआउट!\n\nमोबाइल में GPS चालू है? बाहर जाकर फिर कोशिश करें।\nफॉर्म सेव नहीं होगा।";
         }
-        doSave();
+        if (gpsStatus) {
+          gpsStatus.textContent = "❌ लोकेशन जरूरी है — बिना लोकेशन सेव नहीं होगा";
+          gpsStatus.style.color = "#c62828";
+        }
+        alert(msg);
       },
       { timeout: 8000, maximumAge: 60000, enableHighAccuracy: true }
     );
   } else {
-    if (gpsStatus) gpsStatus.textContent = "⚠️ यह फोन GPS को सपोर्ट नहीं करता";
-    doSave();
+    btn.disabled = false;
+    btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
+    if (gpsStatus) { gpsStatus.textContent = "❌ यह फोन GPS सपोर्ट नहीं करता — Chrome में खोलें"; gpsStatus.style.color = "#c62828"; }
+    alert("❌ आपका फोन या ब्राउज़र GPS सपोर्ट नहीं करता!\n\nकृपया Google Chrome में खोलें और फिर कोशिश करें।");
   }
 }
 
