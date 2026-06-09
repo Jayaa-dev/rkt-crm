@@ -1,11 +1,12 @@
-// RKT Motors CRM — Service Worker v1.1
-var CACHE = 'rkt-crm-v2';
+// RKT Motors CRM — Service Worker v1.2 (Network-first = always latest)
+var CACHE = 'rkt-crm-v3';
 var ASSETS = [
   '/rkt-crm/',
   '/rkt-crm/index.html',
   '/rkt-crm/manifest.json',
   '/rkt-crm/icons/icon-192.png',
-  '/rkt-crm/icons/icon-512.png'
+  '/rkt-crm/icons/icon-512.png',
+  '/rkt-crm/icons/rkt-logo-original.png'
 ];
 
 // Install — cache app shell
@@ -16,7 +17,7 @@ self.addEventListener('install', function(e) {
   self.skipWaiting();
 });
 
-// Activate — clean old caches
+// Activate — clean old caches immediately
 self.addEventListener('activate', function(e) {
   e.waitUntil(
     caches.keys().then(function(keys) {
@@ -29,24 +30,44 @@ self.addEventListener('activate', function(e) {
   self.clients.claim();
 });
 
-// Fetch — serve from cache, fall back to network
+// Fetch — Network first for HTML (always latest), cache first for assets
 self.addEventListener('fetch', function(e) {
-  // Don't cache GAS API calls — always go to network
-  if (e.request.url.indexOf('script.google.com') !== -1) {
+  var url = e.request.url;
+
+  // GAS API — always network, never cache
+  if (url.indexOf('script.google.com') !== -1) {
     e.respondWith(fetch(e.request));
     return;
   }
-  e.respondWith(
-    caches.match(e.request).then(function(cached) {
-      return cached || fetch(e.request).then(function(response) {
-        if (response.status === 200) {
+
+  // Leaflet CDN — cache first (rarely changes)
+  if (url.indexOf('unpkg.com') !== -1 || url.indexOf('openstreetmap.org') !== -1) {
+    e.respondWith(
+      caches.match(e.request).then(function(cached) {
+        return cached || fetch(e.request).then(function(response) {
           var clone = response.clone();
           caches.open(CACHE).then(function(c) { c.put(e.request, clone); });
-        }
-        return response;
-      });
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // App HTML — Network first so updates show immediately
+  // Falls back to cache if offline
+  e.respondWith(
+    fetch(e.request).then(function(response) {
+      if (response.status === 200) {
+        var clone = response.clone();
+        caches.open(CACHE).then(function(c) { c.put(e.request, clone); });
+      }
+      return response;
     }).catch(function() {
-      return caches.match('/rkt-crm/index.html');
+      // Offline — serve from cache
+      return caches.match(e.request).then(function(cached) {
+        return cached || caches.match('/rkt-crm/index.html');
+      });
     })
   );
 });
