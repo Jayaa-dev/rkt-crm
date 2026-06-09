@@ -1732,6 +1732,22 @@
     <!--  FIELD MAP                                           -->
     <!-- ════════════════════════════════════════════════════ -->
     <div id="section-fieldmap" class="section">
+
+      <!-- Lock Screen -->
+      <div id="mapLockScreen" class="card" style="margin:40px 20px;padding:30px;text-align:center">
+        <div style="font-size:48px;margin-bottom:10px">🔒</div>
+        <div style="font-size:18px;font-weight:700;color:#1565c0;margin-bottom:6px">Field GPS Map</div>
+        <div style="color:#666;font-size:13px;margin-bottom:20px">This section is password protected</div>
+        <input type="password" id="mapPasswordInput"
+          style="text-align:center;letter-spacing:8px;font-size:24px;width:160px;padding:10px;border:2px solid #1565c0;border-radius:8px;display:block;margin:0 auto 16px"
+          placeholder="••••••" maxlength="6"
+          onkeydown="if(event.key==='Enter') unlockMap()">
+        <button class="btn-primary" onclick="unlockMap()" style="width:160px">🔓 Unlock</button>
+        <div id="mapPassError" style="color:#c62828;font-size:13px;margin-top:10px;display:none">❌ Wrong password</div>
+      </div>
+
+      <!-- Map Content (hidden until unlocked) -->
+      <div id="mapContent" style="display:none">
       <div class="card" style="padding:12px;margin-bottom:10px">
         <div class="card-title">🗺️ Field GPS Map</div>
         <div class="field-row">
@@ -1771,6 +1787,7 @@
 
       <!-- Village list table -->
       <div id="mapVillageTable" style="padding:0 12px 20px"></div>
+      </div><!-- /mapContent -->
     </div><!-- /section-fieldmap -->
 
     <!-- ════════════════════════════════════════════════════ -->
@@ -2207,6 +2224,16 @@ function showTab(tab) {
     document.getElementById("tab-" + t).classList.toggle("active", t === tab);
   });
   if (tab === "dashboard") loadFilterOptions();
+  if (tab === "fieldmap") {
+    if (mapUnlocked) {
+      document.getElementById("mapLockScreen").style.display = "none";
+      document.getElementById("mapContent").style.display    = "block";
+    } else {
+      document.getElementById("mapLockScreen").style.display = "block";
+      document.getElementById("mapContent").style.display    = "none";
+      setTimeout(function(){ document.getElementById("mapPasswordInput").focus(); }, 300);
+    }
+  }
   if (tab === "bills") {
     if (billUnlocked) {
       document.getElementById("billLockScreen").style.display = "none";
@@ -3368,6 +3395,7 @@ function resetPhotos() {
 // ════════════════════════════════════════════════════════════
 // BILL APPROVAL
 // ════════════════════════════════════════════════════════════
+var mapUnlocked     = false;
 var billUnlocked    = false;
 var billRecords     = [];
 var billYearsInited = false;
@@ -3388,6 +3416,25 @@ function checkBillPassword() {
     document.getElementById("billPasswordInput").style.borderColor = "var(--red)";
     setTimeout(function(){
       document.getElementById("billPasswordInput").style.borderColor = "";
+    }, 1500);
+  }
+}
+
+function unlockMap() {
+  var entered = document.getElementById("mapPasswordInput").value;
+  var errEl   = document.getElementById("mapPassError");
+  if (entered === "220285") {
+    mapUnlocked = true;
+    document.getElementById("mapLockScreen").style.display = "none";
+    document.getElementById("mapContent").style.display    = "block";
+    errEl.style.display = "none";
+  } else {
+    errEl.style.display = "block";
+    document.getElementById("mapPasswordInput").value = "";
+    document.getElementById("mapPasswordInput").focus();
+    document.getElementById("mapPasswordInput").style.borderColor = "#c62828";
+    setTimeout(function(){
+      document.getElementById("mapPasswordInput").style.borderColor = "#1565c0";
     }, 1500);
   }
 }
