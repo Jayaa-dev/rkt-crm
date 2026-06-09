@@ -37,7 +37,7 @@
   // ── Register Service Worker (enables PWA install) ─────────
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('/sw.js')
+      navigator.serviceWorker.register('/rkt-crm/sw.js')
         .then(function(r) { console.log('SW registered:', r.scope); })
         .catch(function(e) { console.log('SW error:', e); });
     });
@@ -2221,8 +2221,7 @@ function checkCustomer() {
         document.getElementById("activityType").disabled  = false;
         document.getElementById("submitBtn").textContent  = "💾 Save Customer";
       }
-    })
-  , function(e) { console.error(e.message); });
+    }, function(e) { console.error(e.message); });
 }
 
 // ════════════════════════════════════════════════════════════

@@ -1,11 +1,11 @@
-// RKT Motors CRM — Service Worker v1.0
-var CACHE = 'rkt-crm-v1';
+// RKT Motors CRM — Service Worker v1.1
+var CACHE = 'rkt-crm-v2';
 var ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  '/rkt-crm/',
+  '/rkt-crm/index.html',
+  '/rkt-crm/manifest.json',
+  '/rkt-crm/icons/icon-192.png',
+  '/rkt-crm/icons/icon-512.png'
 ];
 
 // Install — cache app shell
@@ -39,7 +39,6 @@ self.addEventListener('fetch', function(e) {
   e.respondWith(
     caches.match(e.request).then(function(cached) {
       return cached || fetch(e.request).then(function(response) {
-        // Cache new requests on the fly
         if (response.status === 200) {
           var clone = response.clone();
           caches.open(CACHE).then(function(c) { c.put(e.request, clone); });
@@ -47,8 +46,7 @@ self.addEventListener('fetch', function(e) {
         return response;
       });
     }).catch(function() {
-      // Offline fallback
-      return caches.match('/index.html');
+      return caches.match('/rkt-crm/index.html');
     })
   );
 });
