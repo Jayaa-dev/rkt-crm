@@ -2807,27 +2807,40 @@ function loadAdminAttDate() {
   if (!salesman) { showToast("❌ Team Member चुनें", 2000, "#c62828"); return; }
   if (!dateVal)  { showToast("❌ Date चुनें", 2000, "#c62828"); return; }
 
-  // dateVal is YYYY-MM-DD
   var parts    = dateVal.split("-");
-  var dateKey  = dateVal; // already YYYY-MM-DD
-  var dispDate = parts[2] + "-" + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(parts[1])-1] + "-" + parts[0];
+  var dateKey  = dateVal; // YYYY-MM-DD
+  var month    = parseInt(parts[1], 10);
+  var year     = parseInt(parts[0], 10);
+  var mNames   = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var dispDate = parts[2] + "-" + mNames[month-1] + "-" + year;
 
-  // Look up status from last loaded attendance data
-  var currentStatus = "unknown";
-  if (_attLastData) {
-    var res = _attLastData.results.find(function(r){ return r.salesman === salesman; });
-    if (res && res.dayStatus[dateKey]) currentStatus = res.dayStatus[dateKey];
-  }
-
-  _attPending = { salesman: salesman, dateKey: dateKey, currentStatus: currentStatus };
+  _attPending = { salesman: salesman, dateKey: dateKey, currentStatus: null };
 
   var statusDiv = document.getElementById("adminAttCurrentStatus");
   statusDiv.style.display = "block";
-  statusDiv.innerHTML =
-    "<b>" + salesman + "</b> — <b>" + dispDate + "</b><br>" +
-    "अभी का Status: <span style='font-weight:800;color:" + (STATUS_COLOR[currentStatus]||"#333") + "'>" + (STATUS_LABEL[currentStatus]||currentStatus) + "</span>";
+  statusDiv.innerHTML = "⏳ Status ढूंढ रहे हैं...";
+  document.getElementById("adminAttButtons").style.display = "none";
 
-  document.getElementById("adminAttButtons").style.display = "block";
+  // Always fetch fresh from GAS for this salesman + month
+  gasCall('getAttendance', { filters: { month: month, year: year, salesman: salesman } }, function(data) {
+    var currentStatus = "unknown";
+    if (data && data.results && data.results.length) {
+      var row = data.results[0];
+      currentStatus = row.dayStatus[dateKey] || "unknown";
+    }
+    _attPending.currentStatus = currentStatus;
+    _attLastData = data; // cache for calendar refresh later
+
+    var col = STATUS_COLOR[currentStatus] || "#333";
+    var lbl = STATUS_LABEL[currentStatus] || currentStatus;
+    statusDiv.innerHTML =
+      "<b>" + salesman + "</b> — <b>" + dispDate + "</b><br>" +
+      "अभी का Status: <span style='font-weight:800;color:" + col + "'>" + lbl + "</span>";
+
+    document.getElementById("adminAttButtons").style.display = "block";
+  }, function(e) {
+    statusDiv.innerHTML = "<span style='color:red'>❌ Error: " + e.message + "</span>";
+  });
 }
 
 function saveAttOverride(status) {
@@ -2840,7 +2853,9 @@ function saveAttOverride(status) {
 
   gasCall('saveAttOverride', { salesman: s, dateKey: d, status: status }, function(res) {
     var parts    = d.split("-");
-    var dispDate = parts[2] + "-" + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(parts[1])-1] + "-" + parts[0];
+    var month    = parseInt(parts[1], 10);
+    var year     = parseInt(parts[0], 10);
+    var dispDate = parts[2] + "-" + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][month-1] + "-" + year;
     showToast("✅ " + s + " — " + dispDate + " → " + (STATUS_LABEL[status]||status), 3500, "#2e7d32");
 
     // Update current status display
@@ -2850,7 +2865,12 @@ function saveAttOverride(status) {
       "नया Status: <span style='font-weight:800;color:" + (STATUS_COLOR[status]||"#333") + "'>" + (STATUS_LABEL[status]||status) + "</span> ✅ Saved";
 
     _attPending.currentStatus = status;
-    loadAttendance(); // refresh calendar
+
+    // Sync attendance filter dropdowns to match the edited date & salesman
+    document.getElementById("attMonth").value    = month;
+    document.getElementById("attYear").value     = year;
+    document.getElementById("attSalesman").value = s;
+    loadAttendance(); // refresh calendar with correct month/year/salesman
   }, function(e) {
     showToast("❌ Error: " + e.message, 3000, "#c62828");
     document.getElementById("adminAttButtons").style.display = "block";
