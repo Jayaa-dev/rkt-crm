@@ -650,11 +650,55 @@
     }
     .cal-day .dn { font-size: 13px; line-height: 1; }
     .cal-day .dl { font-size: 10px; line-height: 1; }
-    .day-present { background: #c8e6c9; color: #1b5e20; }
-    .day-absent  { background: #ffcdd2; color: #b71c1c; }
-    .day-sunday  { background: #f3f3f3; color: #bbb; }
-    .day-future  { background: #fafafa; color: #ccc; border: 1px dashed #ddd; }
-    .day-empty   { background: transparent; }
+    .day-present  { background: #c8e6c9; color: #1b5e20; }
+    .day-absent   { background: #ffcdd2; color: #b71c1c; }
+    .day-halfday  { background: #fff9c4; color: #f57f17; }
+    .day-holiday  { background: #e1bee7; color: #6a1b9a; }
+    .day-sunday   { background: #f3f3f3; color: #bbb; }
+    .day-future   { background: #fafafa; color: #ccc; border: 1px dashed #ddd; }
+    .day-empty    { background: transparent; }
+    .day-admin-edit { cursor: pointer; outline: 2px dashed #1565c0; }
+    .day-admin-edit:hover { transform: scale(1.12); transition: transform 0.15s; }
+
+    /* Admin attendance panel */
+    .admin-att-bar {
+      background: linear-gradient(135deg,#1a237e,#1565c0);
+      color: #fff; border-radius: 10px; padding: 12px 14px;
+      margin-bottom: 12px; display: flex; align-items: center;
+      justify-content: space-between; gap: 8px;
+    }
+    .admin-att-bar span { font-size: 14px; font-weight: 700; }
+    .btn-admin-att {
+      background: #fff; color: #1565c0; border: none;
+      border-radius: 8px; padding: 8px 16px;
+      font-weight: 800; font-size: 13px; cursor: pointer;
+    }
+
+    /* Override modal */
+    .att-modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55); z-index: 9000;
+      align-items: center; justify-content: center;
+    }
+    .att-modal-overlay.open { display: flex; }
+    .att-modal {
+      background: #fff; border-radius: 14px; padding: 22px 20px;
+      width: 90%; max-width: 340px; box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    }
+    .att-modal h3 { margin: 0 0 6px; font-size: 17px; color: #1565c0; }
+    .att-modal p  { margin: 0 0 14px; font-size: 13px; color: #666; }
+    .att-opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .att-opt-btn  {
+      padding: 14px 8px; border: none; border-radius: 10px;
+      font-size: 14px; font-weight: 800; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+    .att-opt-present  { background: #c8e6c9; color: #1b5e20; }
+    .att-opt-halfday  { background: #fff9c4; color: #f57f17; }
+    .att-opt-absent   { background: #ffcdd2; color: #b71c1c; }
+    .att-opt-holiday  { background: #e1bee7; color: #6a1b9a; }
+    .att-opt-clear    { background: #f5f5f5; color: #555; grid-column: span 2; }
+    .btn-modal-cancel { background: #eee; color: #333; border: none; border-radius: 8px; padding: 10px 18px; font-weight: 700; cursor: pointer; width: 100%; }
 
     /* ── SPINNER ──────────────────────────────────────────── */
     .spinner { text-align: center; padding: 30px; color: var(--muted); font-size: 15px; }
@@ -1537,7 +1581,34 @@
         <button class="btn-primary" onclick="loadAttendance()">📊 Load Attendance</button>
       </div>
 
+      <!-- Admin bar (hidden until unlocked) -->
+      <div id="attAdminBar" style="display:none">
+        <div class="admin-att-bar">
+          <span>🔐 Admin Mode — Calendar pe tap karke status badlein</span>
+          <button class="btn-admin-att" onclick="lockAttendanceAdmin()">🔒 Lock</button>
+        </div>
+      </div>
+      <div id="attAdminLockBar" style="margin:0 0 10px">
+        <button class="btn-refresh" onclick="unlockAttendanceAdmin()" style="width:100%">🔐 Admin: Attendance Edit</button>
+      </div>
+
       <div id="attResults"></div>
+    </div>
+
+    <!-- Attendance Override Modal -->
+    <div id="attOverrideModal" class="att-modal-overlay">
+      <div class="att-modal">
+        <h3>📅 Attendance बदलें</h3>
+        <p id="attModalLabel">Salesman — Date</p>
+        <div class="att-opt-grid">
+          <button class="att-opt-btn att-opt-present"  onclick="saveAttOverride('present') ">✅<span>Present</span></button>
+          <button class="att-opt-btn att-opt-halfday"  onclick="saveAttOverride('halfday') ">🌓<span>Half Day</span></button>
+          <button class="att-opt-btn att-opt-absent"   onclick="saveAttOverride('absent')  ">❌<span>Absent</span></button>
+          <button class="att-opt-btn att-opt-holiday"  onclick="saveAttOverride('holiday') ">🏖️<span>Holiday</span></button>
+          <button class="att-opt-btn att-opt-clear"    onclick="saveAttOverride('auto')    ">🔄 Auto (Sheet Data से)</button>
+        </div>
+        <button class="btn-modal-cancel" onclick="closeAttModal()">रद्द करें</button>
+      </div>
     </div>
 
     <!-- ════════════════════════════════════════════════════ -->
@@ -2676,7 +2747,61 @@ function loadAttendance() {
   });
 }
 
+var _attAdminUnlocked = false;
+var _attLastData      = null;
+var _attOverridePending = { salesman: null, dateKey: null };
+
+function unlockAttendanceAdmin() {
+  var pw = prompt("Admin Password डालें:");
+  if (pw === "220285") {
+    _attAdminUnlocked = true;
+    document.getElementById("attAdminBar").style.display     = "block";
+    document.getElementById("attAdminLockBar").style.display = "none";
+    showToast("🔓 Admin Mode चालू — calendar pe tap karke status badlein", 3000, "#1565c0");
+    if (_attLastData) renderAttendance(_attLastData);
+  } else if (pw !== null) {
+    showToast("❌ गलत पासवर्ड", 2500, "#c62828");
+  }
+}
+function lockAttendanceAdmin() {
+  _attAdminUnlocked = false;
+  document.getElementById("attAdminBar").style.display     = "none";
+  document.getElementById("attAdminLockBar").style.display = "block";
+  if (_attLastData) renderAttendance(_attLastData);
+  showToast("🔒 Admin Mode बंद", 2000, "#555");
+}
+
+function openAttModal(salesman, dateKey, currentStatus) {
+  if (!_attAdminUnlocked) return;
+  _attOverridePending = { salesman: salesman, dateKey: dateKey };
+  var parts = dateKey.split("-");
+  var d     = new Date(parts[0], parts[1]-1, parts[2]);
+  var mNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  document.getElementById("attModalLabel").textContent =
+    salesman + " — " + d.getDate() + " " + mNames[d.getMonth()] + " " + d.getFullYear() +
+    " (अभी: " + (currentStatus || "auto") + ")";
+  document.getElementById("attOverrideModal").classList.add("open");
+}
+function closeAttModal() {
+  document.getElementById("attOverrideModal").classList.remove("open");
+  _attOverridePending = { salesman: null, dateKey: null };
+}
+function saveAttOverride(status) {
+  var s = _attOverridePending.salesman;
+  var d = _attOverridePending.dateKey;
+  if (!s || !d) return;
+  closeAttModal();
+  showToast("⏳ सेव हो रहा है...", 1500, "#1565c0");
+  gasCall('saveAttOverride', { salesman: s, dateKey: d, status: status }, function(res) {
+    showToast("✅ " + s + " — " + d + " → " + status, 3000, "#2e7d32");
+    loadAttendance(); // refresh
+  }, function(e) {
+    showToast("❌ Error: " + e.message, 3000, "#c62828");
+  });
+}
+
 function renderAttendance(data) {
+  _attLastData = data;
   var c = document.getElementById("attResults");
   if (!data || !data.results || !data.results.length) {
     c.innerHTML = "<p style='text-align:center;color:#999;padding:20px'>No data found.</p>";
@@ -2689,10 +2814,23 @@ function renderAttendance(data) {
              mNames[data.month] + " " + data.year + " — " +
              data.results[0].workingDays + " working days</p>";
 
+  var statusLabel = { present:"✓", absent:"✗", halfday:"½", holiday:"🏖", sunday:"", future:"" };
+  var statusClass = {
+    present: "day-present", absent: "day-absent", halfday: "day-halfday",
+    holiday: "day-holiday", sunday: "day-sunday",  future:  "day-future"
+  };
+
   data.results.forEach(function(r) {
-    var pct = r.workingDays > 0 ? Math.round(r.presentCount / r.workingDays * 100) : 0;
+    var presentScore = 0;
+    Object.values(r.dayStatus).forEach(function(st) {
+      if (st === "present")  presentScore += 1;
+      if (st === "halfday")  presentScore += 0.5;
+    });
+    var pct      = r.workingDays > 0 ? Math.round(presentScore / r.workingDays * 100) : 0;
     var barColor = pct >= 90 ? "#4caf50" : pct >= 70 ? "#ffa726" : "#ef5350";
     var initials = r.salesman.substring(0,2).toUpperCase();
+    var halfCount = Object.values(r.dayStatus).filter(function(s){ return s==="halfday"; }).length;
+    var holCount  = Object.values(r.dayStatus).filter(function(s){ return s==="holiday"; }).length;
 
     // Calendar
     var cal = "<div class='cal-grid'>";
@@ -2702,12 +2840,13 @@ function renderAttendance(data) {
     var firstDow = new Date(data.year, data.month - 1, 1).getDay();
     for (var b = 0; b < firstDow; b++) cal += "<div class='cal-day day-empty'></div>";
     data.calendar.forEach(function(c2) {
-      var st  = r.dayStatus[c2.dateKey];
-      var cls = st === "present" ? "day-present" :
-                st === "absent"  ? "day-absent"  :
-                st === "sunday"  ? "day-sunday"  : "day-future";
-      var lbl = st === "present" ? "✓" : st === "absent" ? "✗" : "";
-      cal += "<div class='cal-day " + cls + "'><span class='dn'>" + c2.day + "</span><span class='dl'>" + lbl + "</span></div>";
+      var st  = r.dayStatus[c2.dateKey] || "future";
+      var cls = (statusClass[st] || "day-future") + (_attAdminUnlocked && st !== "sunday" ? " day-admin-edit" : "");
+      var lbl = statusLabel[st] || "";
+      var onclick = _attAdminUnlocked && st !== "sunday"
+        ? " onclick=\"openAttModal('" + r.salesman + "','" + c2.dateKey + "','" + st + "')\""
+        : "";
+      cal += "<div class='cal-day " + cls + "'" + onclick + "><span class='dn'>" + c2.day + "</span><span class='dl'>" + lbl + "</span></div>";
     });
     cal += "</div>";
 
@@ -2720,7 +2859,9 @@ function renderAttendance(data) {
       "</div>" +
       "<div class='att-stats'>" +
         "<span class='att-badge ab-present'>✅ " + r.presentCount + " Present</span>" +
+        (halfCount ? "<span class='att-badge' style='background:#fff9c4;color:#f57f17'>🌓 " + halfCount + " Half Day</span>" : "") +
         "<span class='att-badge ab-absent'>❌ "  + r.absentCount  + " Absent</span>" +
+        (holCount  ? "<span class='att-badge' style='background:#e1bee7;color:#6a1b9a'>🏖️ " + holCount + " Holiday</span>" : "") +
         "<span class='att-badge ab-working'>📅 " + r.workingDays  + " Days</span>" +
       "</div>" +
       "<div class='pct-bar'><div class='pct-fill' style='width:" + pct + "%;background:" + barColor + "'></div></div>" +
