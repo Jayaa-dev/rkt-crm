@@ -89,7 +89,7 @@
 
   // ── gasCall() — replaces all google.script.run calls ──────
   function gasCall(action, params, onSuccess, onFailure) {
-    var isWrite = ['saveData','saveActivityImage','savePetrolBill'].indexOf(action) !== -1;
+    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride'].indexOf(action) !== -1;
     var promise;
     if (isWrite) {
       // POST for write operations (image uploads etc.)
