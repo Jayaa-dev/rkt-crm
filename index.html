@@ -2411,7 +2411,9 @@ function fillCustomerFields(d) {
   setVal("village",        d.village);
   setVal("activityType",   d.activityType);
   setVal("model",          d.model);
-  setVal("salesman",       d.salesman);
+  // For service entries salesman is blank — use mechanicName as fallback
+  setVal("salesman",       d.salesman || d.mechanicName || "");
+  setVal("mechanicName",   d.mechanicName || "");
   setVal("enquiryType",    d.enquiryType);
   setVal("age",            d.age);
   setVal("exchange",       d.exchange);
@@ -2433,7 +2435,20 @@ function fillCustomerFields(d) {
 
 function setVal(id, val) {
   var el = document.getElementById(id);
-  if (el) el.value = val || "";
+  if (!el) return;
+  // Try exact match first
+  el.value = val || "";
+  // If select and value didn't set (case mismatch), try case-insensitive match
+  if (el.tagName === "SELECT" && el.value !== (val || "")) {
+    var lower = String(val || "").toLowerCase().trim();
+    for (var i = 0; i < el.options.length; i++) {
+      if (el.options[i].value.toLowerCase().trim() === lower ||
+          el.options[i].text.toLowerCase().trim()  === lower) {
+        el.selectedIndex = i;
+        break;
+      }
+    }
+  }
 }
 
 function setCBs(sel, csv) {
