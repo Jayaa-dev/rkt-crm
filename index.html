@@ -2670,6 +2670,7 @@ function submitForm() {
       btn.disabled = false;
       btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
       if (gpsStatus) { gpsStatus.textContent = "📡 लोकेशन: तैयार है"; gpsStatus.style.color = "#1565c0"; }
+      showMotivationToast(data.salesman || data.mechanicName || "", data.enquiryType || "");
       var again = confirm("✅ " + resp + "\n\nNew entry?");
       if (again) resetForm();
       else {
@@ -4491,6 +4492,100 @@ function renderFieldMap(data) {
   }
 
   tableEl.innerHTML = html;
+}
+
+// ── Motivation toast after form save ──────────────────────────
+var MOTIV = {
+  "Cold": [
+    "Cold Inquiry एक भविष्य की Sale है। आज की एंट्री, कल की Delivery बन सकती है।",
+    "जो Inquiry CRM में नहीं, वो Opportunity भी नहीं। हर ग्राहक को रिकॉर्ड करें।",
+    "Contacted ग्राहक आज नहीं खरीदेगा, लेकिन Follow-up उसे कल ग्राहक बना सकता है।",
+    "जितनी ज्यादा Inquiry Entry, उतनी ज्यादा Sale की संभावना।",
+    "सफल Salesman ग्राहक ढूंढता नहीं, हर ग्राहक का रिकॉर्ड बनाता है।",
+    "Cold Inquiry को छोड़ना आसान है, लेकिन विजेता Salesman उसे Sale में बदलता है।",
+    "हर Contacted Inquiry Target के एक कदम और करीब ले जाती है।"
+  ],
+  "Contacted": [
+    "Cold Inquiry एक भविष्य की Sale है। आज की एंट्री, कल की Delivery बन सकती है।",
+    "जो Inquiry CRM में नहीं, वो Opportunity भी नहीं। हर ग्राहक को रिकॉर्ड करें।",
+    "Contacted ग्राहक आज नहीं खरीदेगा, लेकिन Follow-up उसे कल ग्राहक बना सकता है।",
+    "जितनी ज्यादा Inquiry Entry, उतनी ज्यादा Sale की संभावना।",
+    "सफल Salesman ग्राहक ढूंढता नहीं, हर ग्राहक का रिकॉर्ड बनाता है।",
+    "Cold Inquiry को छोड़ना आसान है, लेकिन विजेता Salesman उसे Sale में बदलता है।",
+    "हर Contacted Inquiry Target के एक कदम और करीब ले जाती है।"
+  ],
+  "Hot": [
+    "Hot Inquiry इंतजार नहीं करती, तेज़ Follow-up ही Delivery दिलाता है।",
+    "हर Hot Inquiry के पीछे एक संभावित Delivery खड़ी है।",
+    "आज का Hot Lead, इस महीने का Target पूरा कर सकता है।",
+    "Hot Inquiry को 24 घंटे से ज्यादा ठंडा मत होने दो।"
+  ],
+  "Warm": [
+    "Warm Inquiry मतलब ग्राहक सोच रहा है, आपका Follow-up उसे फैसला लेने में मदद करेगा।",
+    "Warm Lead को समय दो, वही अगली Delivery बन सकती है।",
+    "Warm Inquiry को नजरअंदाज मत करो, यह Sale के सबसे करीब का पड़ाव है।",
+    "जो Salesman Warm Inquiry पर मेहनत करता है, वही Target पर जीत हासिल करता है।",
+    "Warm Inquiry में ग्राहक की रुचि है, अब आपकी जिम्मेदारी है उसे विश्वास दिलाना।"
+  ]
+};
+
+var MOTIV_COLORS = {
+  "Hot":       { bg: "#fff3e0", border: "#e65100", icon: "🔥", nameColor: "#e65100" },
+  "Warm":      { bg: "#fff8e1", border: "#f9a825", icon: "🌤️", nameColor: "#f57f17" },
+  "Cold":      { bg: "#e3f2fd", border: "#1565c0", icon: "❄️", nameColor: "#1565c0" },
+  "Contacted": { bg: "#e8f5e9", border: "#2e7d32", icon: "📞", nameColor: "#2e7d32" }
+};
+
+function showMotivationToast(salesman, status) {
+  var msgs = MOTIV[status];
+  if (!msgs || msgs.length === 0) return;
+
+  var msg   = msgs[Math.floor(Math.random() * msgs.length)];
+  var style = MOTIV_COLORS[status] || { bg:"#f5f5f5", border:"#999", icon:"💡", nameColor:"#333" };
+  var name  = salesman ? salesman.split(" ")[0] : ""; // first name only
+
+  // Remove any existing toast
+  var old = document.getElementById("motivToast");
+  if (old) old.parentNode.removeChild(old);
+
+  var toast = document.createElement("div");
+  toast.id = "motivToast";
+  toast.style.cssText =
+    "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);" +
+    "width:88%;max-width:380px;z-index:9999;" +
+    "background:" + style.bg + ";border:2px solid " + style.border + ";" +
+    "border-radius:14px;padding:14px 16px;box-shadow:0 6px 24px rgba(0,0,0,0.18);" +
+    "font-family:Arial,sans-serif;animation:toastIn 0.35s ease;";
+
+  toast.innerHTML =
+    "<div style='display:flex;align-items:flex-start;gap:10px'>" +
+      "<span style='font-size:26px;line-height:1'>" + style.icon + "</span>" +
+      "<div style='flex:1'>" +
+        (name ? "<div style='font-size:13px;font-weight:700;color:" + style.nameColor + ";margin-bottom:4px'>💪 " + name + ", शाबाश!</div>" : "") +
+        "<div style='font-size:13px;color:#333;line-height:1.5'>" + msg + "</div>" +
+      "</div>" +
+      "<span onclick='this.parentNode.parentNode.style.display=\"none\"' " +
+        "style='font-size:18px;color:#999;cursor:pointer;margin-left:4px;line-height:1'>✕</span>" +
+    "</div>";
+
+  // Inject keyframe once
+  if (!document.getElementById("toastKeyframe")) {
+    var style2 = document.createElement("style");
+    style2.id = "toastKeyframe";
+    style2.textContent = "@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}";
+    document.head.appendChild(style2);
+  }
+
+  document.body.appendChild(toast);
+
+  // Auto-dismiss after 6 seconds
+  setTimeout(function() {
+    if (toast.parentNode) {
+      toast.style.transition = "opacity 0.4s";
+      toast.style.opacity = "0";
+      setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 400);
+    }
+  }, 6000);
 }
 </script>
 </body>
