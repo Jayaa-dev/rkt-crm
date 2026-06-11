@@ -2671,14 +2671,17 @@ function submitForm() {
       btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
       if (gpsStatus) { gpsStatus.textContent = "📡 लोकेशन: तैयार है"; gpsStatus.style.color = "#1565c0"; }
       showMotivationToast(data.salesman || data.mechanicName || "", data.enquiryType || "");
-      var again = confirm("✅ " + resp + "\n\nNew entry?");
-      if (again) resetForm();
-      else {
-        document.body.innerHTML =
-          "<div style='text-align:center;padding:60px;font-family:Arial'>" +
-          "<h1 style='color:#1565c0'>धन्यवाद 🙏</h1>" +
-          "<p>Data saved successfully.</p></div>";
-      }
+      // Delay confirm so browser renders the toast before blocking with dialog
+      setTimeout(function() {
+        var again = confirm("✅ " + resp + "\n\nNew entry?");
+        if (again) resetForm();
+        else {
+          document.body.innerHTML =
+            "<div style='text-align:center;padding:60px;font-family:Arial'>" +
+            "<h1 style='color:#1565c0'>धन्यवाद 🙏</h1>" +
+            "<p>Data saved successfully.</p></div>";
+        }
+      }, 300);
   }, function(e) {
       btn.disabled = false;
       btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
