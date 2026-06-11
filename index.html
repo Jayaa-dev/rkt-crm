@@ -1837,7 +1837,25 @@
         <div class="card-title">🗺️ Field GPS Map</div>
         <div class="field-row">
           <div class="field">
-            <label>Salesman</label>
+            <label>Month</label>
+            <select id="mapMonth">
+              <option value="0">All Months</option>
+              <option value="1">Jan</option><option value="2">Feb</option>
+              <option value="3">Mar</option><option value="4">Apr</option>
+              <option value="5">May</option><option value="6">Jun</option>
+              <option value="7">Jul</option><option value="8">Aug</option>
+              <option value="9">Sep</option><option value="10">Oct</option>
+              <option value="11">Nov</option><option value="12">Dec</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Date (optional)</label>
+            <input type="date" id="mapDate" style="width:100%;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:14px">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Team Member</label>
             <select id="mapSalesman">
               <option value="All">All</option>
               <option>Abhishek</option><option>Shivdayal</option>
@@ -4276,15 +4294,23 @@ var STATUS_COLORS = {
 };
 
 function loadFieldMap() {
-  var salesman = document.getElementById("mapSalesman").value;
-  var status   = document.getElementById("mapStatus").value;
+  var salesman  = document.getElementById("mapSalesman").value;
+  var status    = document.getElementById("mapStatus").value;
+  var monthVal  = document.getElementById("mapMonth").value;   // "0" = All
+  var dateVal   = document.getElementById("mapDate").value;    // "YYYY-MM-DD" or ""
+
+  // If a specific date is selected, derive month from it (override month dropdown)
+  if (dateVal) {
+    var parts = dateVal.split("-");
+    monthVal = String(parseInt(parts[1], 10)); // "1"–"12"
+  }
 
   document.getElementById("mapVillageSummary").innerHTML =
     "<div class='spinner' style='padding:20px;text-align:center'>⏳ Loading GPS data...</div>";
   document.getElementById("mapContainer").style.display = "none";
   document.getElementById("mapVillageTable").innerHTML  = "";
 
-  gasCall('getGpsData', { filters: { salesman: salesman, status: status } },
+  gasCall('getGpsData', { filters: { salesman: salesman, status: status, month: monthVal, date: dateVal } },
     function(data) { renderFieldMap(data); },
     function(e)    {
       document.getElementById("mapVillageSummary").innerHTML =
@@ -4296,12 +4322,18 @@ function loadFieldMap() {
 function renderFieldMap(data) {
   var summaryEl = document.getElementById("mapVillageSummary");
   var tableEl   = document.getElementById("mapVillageTable");
+  var dateVal   = document.getElementById("mapDate").value;
 
   if (!data || data.total === 0) {
     summaryEl.innerHTML = "<div class='card' style='text-align:center;padding:20px;color:#999'>" +
       "📍 No GPS data found.<br><small>GPS is captured when a record is saved from the field.</small></div>";
+    tableEl.innerHTML = "";
     return;
   }
+
+  // ── Unique salesmen count ──
+  var uniqueSalesmen = {};
+  data.points.forEach(function(p) { if (p.salesman) uniqueSalesmen[p.salesman] = true; });
 
   // ── Summary KPI strip ──
   summaryEl.innerHTML =
@@ -4312,6 +4344,9 @@ function renderFieldMap(data) {
     "<div class='card' style='min-width:110px;text-align:center;padding:12px'>" +
       "<div style='font-size:22px;font-weight:700;color:#2e7d32'>" + data.villages.length + "</div>" +
       "<div style='font-size:11px;color:#666'>Villages</div></div>" +
+    "<div class='card' style='min-width:110px;text-align:center;padding:12px'>" +
+      "<div style='font-size:22px;font-weight:700;color:#6a1b9a'>" + Object.keys(uniqueSalesmen).length + "</div>" +
+      "<div style='font-size:11px;color:#666'>Team Members</div></div>" +
     "</div>";
 
   // ── Initialize Leaflet map ──
@@ -4322,85 +4357,140 @@ function renderFieldMap(data) {
     leafletMap = null;
   }
 
-  // Center on first point
-  var centerLat = data.points[0].lat;
-  var centerLng = data.points[0].lng;
-
-  leafletMap = L.map('leafletMap').setView([centerLat, centerLng], 11);
-
+  leafletMap = L.map('leafletMap').setView([data.points[0].lat, data.points[0].lng], 11);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
   }).addTo(leafletMap);
 
-  // ── Add village cluster markers ──
-  data.villages.forEach(function(v) {
-    var topStatus = Object.keys(v.statuses).sort(function(a,b){
-      return v.statuses[b] - v.statuses[a];
-    })[0] || "Cold";
-    var color = STATUS_COLORS[topStatus] || "#1565c0";
+  // ── Add markers — day view: individual pins per person; else village clusters ──
+  if (dateVal) {
+    // Individual pin per GPS record
+    data.points.forEach(function(p) {
+      var color = STATUS_COLORS[p.status] || "#1565c0";
+      var initials = (p.salesman || "?").split(" ").map(function(w){return w[0];}).join("").toUpperCase().slice(0,2);
 
-    var icon = L.divIcon({
-      className: '',
-      html: '<div style="background:' + color + ';color:#fff;border-radius:50%;' +
-            'width:36px;height:36px;display:flex;align-items:center;justify-content:center;' +
-            'font-weight:700;font-size:13px;border:3px solid #fff;' +
-            'box-shadow:0 2px 6px rgba(0,0,0,0.4)">' + v.count + '</div>',
-      iconSize: [36, 36],
-      iconAnchor: [18, 18]
+      var icon = L.divIcon({
+        className: '',
+        html: '<div style="background:' + color + ';color:#fff;border-radius:50%;' +
+              'width:34px;height:34px;display:flex;align-items:center;justify-content:center;' +
+              'font-weight:700;font-size:12px;border:3px solid #fff;' +
+              'box-shadow:0 2px 6px rgba(0,0,0,0.4)">' + initials + '</div>',
+        iconSize: [34, 34],
+        iconAnchor: [17, 17]
+      });
+
+      var timeStr = p.timestamp ? ("<br><small style='color:#888'>🕐 " + p.timestamp + "</small>") : "";
+      var popup = "<b style='font-size:13px'>👤 " + (p.salesman || "Unknown") + "</b>" + timeStr +
+        "<br><span style='font-size:12px'>📍 " + p.village + "</span>" +
+        "<br><span style='font-size:12px'>👨‍🌾 " + (p.customer || "—") + "</span>" +
+        "<br><span style='color:" + color + ";font-size:12px;font-weight:600'>" + (p.status || "—") + "</span>" +
+        "<br><a href='https://maps.google.com/?q=" + p.lat + "," + p.lng +
+        "' target='_blank' style='color:#1565c0;font-size:11px'>📲 Open in Maps</a>";
+
+      L.marker([p.lat, p.lng], { icon: icon }).addTo(leafletMap).bindPopup(popup);
     });
+  } else {
+    // Village cluster markers
+    data.villages.forEach(function(v) {
+      var topStatus = Object.keys(v.statuses).sort(function(a,b){
+        return v.statuses[b] - v.statuses[a];
+      })[0] || "Cold";
+      var color = STATUS_COLORS[topStatus] || "#1565c0";
 
-    var popupHtml = "<b style='font-size:14px'>📍 " + v.village + "</b><br>" +
-      "<div style='margin-top:6px;font-size:12px'>";
-    Object.keys(v.statuses).forEach(function(s) {
-      var c = STATUS_COLORS[s] || "#666";
-      popupHtml += "<span style='color:" + c + ";font-weight:600'>" + s + ":</span> " +
-        v.statuses[s] + " &nbsp;";
+      var icon = L.divIcon({
+        className: '',
+        html: '<div style="background:' + color + ';color:#fff;border-radius:50%;' +
+              'width:36px;height:36px;display:flex;align-items:center;justify-content:center;' +
+              'font-weight:700;font-size:13px;border:3px solid #fff;' +
+              'box-shadow:0 2px 6px rgba(0,0,0,0.4)">' + v.count + '</div>',
+        iconSize: [36, 36], iconAnchor: [18, 18]
+      });
+
+      var popupHtml = "<b style='font-size:14px'>📍 " + v.village + "</b><br>" +
+        "<div style='margin-top:6px;font-size:12px'>";
+      Object.keys(v.statuses).forEach(function(s) {
+        var c = STATUS_COLORS[s] || "#666";
+        popupHtml += "<span style='color:" + c + ";font-weight:600'>" + s + ":</span> " + v.statuses[s] + " &nbsp;";
+      });
+      popupHtml += "<br><b>Total: " + v.count + " customers</b>";
+      popupHtml += "<br><small style='color:#666'>Team: " + Object.keys(v.salesmen).join(", ") + "</small></div>";
+
+      L.marker([v.lat, v.lng], { icon: icon }).addTo(leafletMap).bindPopup(popupHtml);
     });
-    popupHtml += "<br><b>Total: " + v.count + " customers</b>";
-    popupHtml += "<br><small style='color:#666'>Salesmen: ";
-    popupHtml += Object.keys(v.salesmen).join(", ") + "</small></div>";
-
-    L.marker([v.lat, v.lng], { icon: icon })
-      .addTo(leafletMap)
-      .bindPopup(popupHtml);
-  });
-
-  // ── Village-wise table ──
-  var html = "<div class='card-title' style='padding:10px 0 8px'>📋 Village-wise Summary</div>";
-  html += "<div style='overflow-x:auto'><table class='dash-table' style='font-size:13px'>";
-  html += "<tr><th>#</th><th>Village</th><th>Customers</th><th>Top Status</th><th>Salesmen</th><th>View</th></tr>";
-
-  data.villages.forEach(function(v, idx) {
-    var topStatus = Object.keys(v.statuses).sort(function(a,b){
-      return v.statuses[b] - v.statuses[a];
-    })[0] || "—";
-    var color = STATUS_COLORS[topStatus] || "#666";
-    var salesStr = Object.keys(v.salesmen).map(function(s) {
-      return s + "(" + v.salesmen[s] + ")";
-    }).join(", ");
-
-    html += "<tr>" +
-      "<td>" + (idx+1) + "</td>" +
-      "<td><b>" + v.village + "</b></td>" +
-      "<td style='text-align:center;font-weight:700'>" + v.count + "</td>" +
-      "<td><span style='color:" + color + ";font-weight:600'>" + topStatus + "</span></td>" +
-      "<td style='font-size:11px;color:#555'>" + salesStr + "</td>" +
-      "<td><a href='https://maps.google.com/?q=" + v.lat + "," + v.lng +
-        "' target='_blank' style='color:#1565c0;font-size:12px'>🗺️ Open</a></td>" +
-      "</tr>";
-  });
-  html += "</table></div>";
-  tableEl.innerHTML = html;
-
-  // Fit map to all markers
-  if (data.villages.length > 1) {
-    var lats = data.villages.map(function(v){ return v.lat; });
-    var lngs = data.villages.map(function(v){ return v.lng; });
-    leafletMap.fitBounds([
-      [Math.min.apply(null,lats), Math.min.apply(null,lngs)],
-      [Math.max.apply(null,lats), Math.max.apply(null,lngs)]
-    ], { padding: [30,30] });
   }
+
+  // ── Fit bounds ──
+  var allLats = data.points.map(function(p){ return p.lat; });
+  var allLngs = data.points.map(function(p){ return p.lng; });
+  if (data.points.length > 1) {
+    leafletMap.fitBounds([
+      [Math.min.apply(null, allLats), Math.min.apply(null, allLngs)],
+      [Math.max.apply(null, allLats), Math.max.apply(null, allLngs)]
+    ], { padding: [30, 30] });
+  }
+
+  var html = "";
+
+  // ── Day-wise team member activity list (shown when date is selected) ──
+  if (dateVal && data.points.length > 0) {
+    // Group by salesman
+    var byPerson = {};
+    data.points.forEach(function(p) {
+      var key = p.salesman || "Unknown";
+      if (!byPerson[key]) byPerson[key] = [];
+      byPerson[key].push(p);
+    });
+
+    html += "<div class='card-title' style='padding:10px 0 6px'>👥 Team Activity on " + dateVal + "</div>";
+    Object.keys(byPerson).sort().forEach(function(name) {
+      var entries = byPerson[name];
+      html += "<div class='card' style='margin-bottom:10px;padding:10px 12px'>";
+      html += "<div style='font-weight:700;font-size:14px;margin-bottom:6px'>👤 " + name +
+              " <span style='font-weight:400;font-size:12px;color:#888'>(" + entries.length + " records)</span></div>";
+      html += "<div style='overflow-x:auto'><table class='dash-table' style='font-size:12px'>";
+      html += "<tr><th>Time</th><th>Village</th><th>Customer</th><th>Status</th><th>Map</th></tr>";
+      entries.forEach(function(e) {
+        var c = STATUS_COLORS[e.status] || "#666";
+        html += "<tr>" +
+          "<td style='white-space:nowrap'>" + (e.timestamp || "—") + "</td>" +
+          "<td>" + e.village + "</td>" +
+          "<td>" + (e.customer || "—") + "</td>" +
+          "<td><span style='color:" + c + ";font-weight:600'>" + (e.status || "—") + "</span></td>" +
+          "<td><a href='https://maps.google.com/?q=" + e.lat + "," + e.lng +
+            "' target='_blank' style='color:#1565c0'>📍</a></td>" +
+          "</tr>";
+      });
+      html += "</table></div></div>";
+    });
+  } else {
+    // ── Village-wise table (default view) ──
+    html += "<div class='card-title' style='padding:10px 0 8px'>📋 Village-wise Summary</div>";
+    html += "<div style='overflow-x:auto'><table class='dash-table' style='font-size:13px'>";
+    html += "<tr><th>#</th><th>Village</th><th>Customers</th><th>Top Status</th><th>Team</th><th>View</th></tr>";
+
+    data.villages.forEach(function(v, idx) {
+      var topStatus = Object.keys(v.statuses).sort(function(a,b){
+        return v.statuses[b] - v.statuses[a];
+      })[0] || "—";
+      var color = STATUS_COLORS[topStatus] || "#666";
+      var salesStr = Object.keys(v.salesmen).map(function(s) {
+        return s + "(" + v.salesmen[s] + ")";
+      }).join(", ");
+
+      html += "<tr>" +
+        "<td>" + (idx+1) + "</td>" +
+        "<td><b>" + v.village + "</b></td>" +
+        "<td style='text-align:center;font-weight:700'>" + v.count + "</td>" +
+        "<td><span style='color:" + color + ";font-weight:600'>" + topStatus + "</span></td>" +
+        "<td style='font-size:11px;color:#555'>" + salesStr + "</td>" +
+        "<td><a href='https://maps.google.com/?q=" + v.lat + "," + v.lng +
+          "' target='_blank' style='color:#1565c0;font-size:12px'>🗺️ Open</a></td>" +
+        "</tr>";
+    });
+    html += "</table></div>";
+  }
+
+  tableEl.innerHTML = html;
 }
 </script>
 </body>
