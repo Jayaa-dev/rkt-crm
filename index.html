@@ -2551,6 +2551,7 @@ function submitForm() {
 
   var actTypeVal = getVal("activityType");
   var isService  = actTypeVal === "Tractor Service-At Field" || actTypeVal === "Tractor Service-At Showroom";
+  var isShowroom = actTypeVal === "Showroom" || actTypeVal === "Office Work";
 
   // For service entries — validate service-specific customer fields
   if (isService) {
@@ -2578,7 +2579,8 @@ function submitForm() {
     document.getElementById("village").value      = svcVillage;
   }
 
-  if (!isService && (!mobile || mobile.length !== 10)) {
+  // Showroom / Office Work — only salesman is required, no customer details
+  if (!isShowroom && !isService && (!mobile || mobile.length !== 10)) {
     showToast("❌ मोबाइल नंबर 10 अंक का होना चाहिए", 3000, "#c62828");
     document.getElementById("mobile").focus();
     return;
@@ -2588,12 +2590,12 @@ function submitForm() {
     document.getElementById("salesman").focus();
     return;
   }
-  if (!village || village.trim() === '') {
+  if (!isShowroom && (!village || village.trim() === '')) {
     showToast("❌ गांव/शहर का नाम जरूरी है", 3000, "#c62828");
     document.getElementById("village").focus();
     return;
   }
-  if (!custName || custName.trim() === '') {
+  if (!isShowroom && (!custName || custName.trim() === '')) {
     showToast("❌ ग्राहक का नाम जरूरी है", 3000, "#c62828");
     document.getElementById("customerName").focus();
     return;
@@ -2605,7 +2607,7 @@ function submitForm() {
     return;
   }
   var isService = actType === "Tractor Service-At Field" || actType === "Tractor Service-At Showroom";
-  if (!isService) {
+  if (!isService && !isShowroom) {
     var enqType = getVal("enquiryType");
     if (!enqType || enqType.trim() === '') {
       showToast("❌ Inquiry Status जरूरी है — Hot / Warm / Cold आदि चुनें", 3000, "#c62828");
