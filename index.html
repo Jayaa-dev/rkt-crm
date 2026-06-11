@@ -1412,8 +1412,12 @@
 
           <div class="field-row">
             <div class="field">
-              <label>Chasis No.</label>
-              <input type="text" id="chasis">
+              <label>Chasis No. <span style="color:#c62828;font-size:11px">* 17 अंक</span></label>
+              <input type="text" id="chasis" maxlength="17"
+                style="text-transform:uppercase"
+                oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
+                placeholder="17-digit Chassis Number">
+              <div id="chasisError" style="color:#c62828;font-size:11px;margin-top:3px;display:none">⚠️ Chassis No. 17 अंक/अक्षर का होना चाहिए</div>
             </div>
             <div class="field">
               <label>Tractor Hours</label>
@@ -2573,6 +2577,15 @@ function submitForm() {
       document.getElementById("svcVillage").focus();
       return;
     }
+    var chasis = getVal("chasis").replace(/[^A-Z0-9]/gi, "").toUpperCase();
+    if (chasis.length !== 17) {
+      showToast("❌ Chassis No. 17 अंक/अक्षर का होना चाहिए", 3000, "#c62828");
+      document.getElementById("chasisError").style.display = "block";
+      document.getElementById("chasis").focus();
+      return;
+    }
+    document.getElementById("chasisError").style.display = "none";
+    document.getElementById("chasis").value = chasis; // store cleaned uppercase value
     // Copy to main fields so saveData picks them up
     document.getElementById("customerName").value = svcName;
     document.getElementById("mobile").value       = svcMobile;
