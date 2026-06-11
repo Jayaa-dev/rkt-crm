@@ -1344,6 +1344,22 @@
         <div class="card">
           <div class="card-title">🔧 Service Details</div>
 
+          <!-- Customer info — mandatory for service too -->
+          <div class="field-row">
+            <div class="field">
+              <label>Customer Name <span style="color:red">*</span></label>
+              <input type="text" id="svcCustomerName" placeholder="ग्राहक का नाम">
+            </div>
+            <div class="field">
+              <label>Mobile Number <span style="color:red">*</span></label>
+              <input type="tel" id="svcMobile" maxlength="10" placeholder="10 अंक">
+            </div>
+          </div>
+          <div class="field">
+            <label>Village <span style="color:red">*</span></label>
+            <input type="text" id="svcVillage" placeholder="गांव / शहर">
+          </div>
+
           <div class="field-row">
             <div class="field">
               <label>Service Type</label>
@@ -2517,6 +2533,33 @@ function submitForm() {
 
   var actTypeVal = getVal("activityType");
   var isService  = actTypeVal === "Tractor Service-At Field" || actTypeVal === "Tractor Service-At Showroom";
+
+  // For service entries — validate service-specific customer fields
+  if (isService) {
+    var svcName    = getVal("svcCustomerName");
+    var svcMobile  = getVal("svcMobile");
+    var svcVillage = getVal("svcVillage");
+    if (!svcName || svcName.trim() === '') {
+      showToast("❌ ग्राहक का नाम जरूरी है", 3000, "#c62828");
+      document.getElementById("svcCustomerName").focus();
+      return;
+    }
+    if (!svcMobile || svcMobile.length !== 10) {
+      showToast("❌ मोबाइल नंबर 10 अंक का होना चाहिए", 3000, "#c62828");
+      document.getElementById("svcMobile").focus();
+      return;
+    }
+    if (!svcVillage || svcVillage.trim() === '') {
+      showToast("❌ गांव/शहर का नाम जरूरी है", 3000, "#c62828");
+      document.getElementById("svcVillage").focus();
+      return;
+    }
+    // Copy to main fields so saveData picks them up
+    document.getElementById("customerName").value = svcName;
+    document.getElementById("mobile").value       = svcMobile;
+    document.getElementById("village").value      = svcVillage;
+  }
+
   if (!isService && (!mobile || mobile.length !== 10)) {
     showToast("❌ मोबाइल नंबर 10 अंक का होना चाहिए", 3000, "#c62828");
     document.getElementById("mobile").focus();
@@ -2700,6 +2743,9 @@ function resetForm() {
 
   document.getElementById("salesFields").classList.remove("hidden");
   document.getElementById("serviceFields").classList.add("hidden");
+  document.getElementById("svcCustomerName").value = "";
+  document.getElementById("svcMobile").value       = "";
+  document.getElementById("svcVillage").value      = "";
   document.getElementById("showroomNotice").style.display = "none";
 
   resetPhotos();
