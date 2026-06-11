@@ -2543,6 +2543,15 @@ function submitForm() {
     document.getElementById("activityType").focus();
     return;
   }
+  var isService = actType === "Tractor Service-At Field" || actType === "Tractor Service-At Showroom";
+  if (!isService) {
+    var enqType = getVal("enquiryType");
+    if (!enqType || enqType.trim() === '') {
+      showToast("❌ Inquiry Status जरूरी है — Hot / Warm / Cold आदि चुनें", 3000, "#c62828");
+      document.getElementById("enquiryType").focus();
+      return;
+    }
+  }
   // ── End validation ────────────────────────────────────────
 
   var brands = [], usages = [], types = [];
