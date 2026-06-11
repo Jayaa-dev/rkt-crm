@@ -2670,18 +2670,22 @@ function submitForm() {
       btn.disabled = false;
       btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
       if (gpsStatus) { gpsStatus.textContent = "📡 लोकेशन: तैयार है"; gpsStatus.style.color = "#1565c0"; }
-      showMotivationToast(data.salesman || data.mechanicName || "", data.enquiryType || "");
-      // Delay confirm so browser renders the toast before blocking with dialog
-      setTimeout(function() {
-        var again = confirm("✅ " + resp + "\n\nNew entry?");
-        if (again) resetForm();
-        else {
-          document.body.innerHTML =
-            "<div style='text-align:center;padding:60px;font-family:Arial'>" +
-            "<h1 style='color:#1565c0'>धन्यवाद 🙏</h1>" +
-            "<p>Data saved successfully.</p></div>";
+      // Show motivation toast, then after 5s show save-confirmation dialog
+      showMotivationToast(
+        data.salesman || data.mechanicName || "",
+        data.enquiryType || "",
+        function() {
+          showSaveConfirm(resp, function(again) {
+            if (again) resetForm();
+            else {
+              document.body.innerHTML =
+                "<div style='text-align:center;padding:60px;font-family:Arial'>" +
+                "<h1 style='color:#1565c0'>धन्यवाद 🙏</h1>" +
+                "<p>Data saved successfully.</p></div>";
+            }
+          });
         }
-      }, 300);
+      );
   }, function(e) {
       btn.disabled = false;
       btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
@@ -4539,56 +4543,119 @@ var MOTIV_COLORS = {
   "Contacted": { bg: "#e8f5e9", border: "#2e7d32", icon: "📞", nameColor: "#2e7d32" }
 };
 
-function showMotivationToast(salesman, status) {
+// onDone callback fires after toast fades out (5s) or is manually closed
+function showMotivationToast(salesman, status, onDone) {
   var msgs = MOTIV[status];
-  if (!msgs || msgs.length === 0) return;
+  // If no messages for this status, skip toast and go straight to confirm
+  if (!msgs || msgs.length === 0) { if (onDone) onDone(); return; }
 
-  var msg   = msgs[Math.floor(Math.random() * msgs.length)];
-  var style = MOTIV_COLORS[status] || { bg:"#f5f5f5", border:"#999", icon:"💡", nameColor:"#333" };
-  var name  = salesman ? salesman.split(" ")[0] : ""; // first name only
+  var msg      = msgs[Math.floor(Math.random() * msgs.length)];
+  var tStyle   = MOTIV_COLORS[status] || { bg:"#f5f5f5", border:"#999", icon:"💡", nameColor:"#333" };
+  var name     = salesman ? salesman.split(" ")[0] : "";
+  var dismissed = false;
 
-  // Remove any existing toast
+  function dismiss() {
+    if (dismissed) return;
+    dismissed = true;
+    toast.style.transition = "opacity 0.4s, transform 0.4s";
+    toast.style.opacity = "0";
+    toast.style.transform = "translateX(-50%) translateY(20px)";
+    setTimeout(function() {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+      if (onDone) onDone();
+    }, 400);
+  }
+
+  // Remove any stale toast
   var old = document.getElementById("motivToast");
   if (old) old.parentNode.removeChild(old);
 
+  // Inject keyframe once
+  if (!document.getElementById("toastKeyframe")) {
+    var ks = document.createElement("style");
+    ks.id = "toastKeyframe";
+    ks.textContent =
+      "@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(30px)}" +
+      "to{opacity:1;transform:translateX(-50%) translateY(0)}}" +
+      "#motivToast .motiv-progress{height:4px;border-radius:2px;width:100%;" +
+      "animation:motivBar 5s linear forwards}" +
+      "@keyframes motivBar{from{width:100%}to{width:0%}}";
+    document.head.appendChild(ks);
+  }
+
   var toast = document.createElement("div");
   toast.id = "motivToast";
+  // Centered vertically on mobile, well above any nav
   toast.style.cssText =
-    "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);" +
-    "width:88%;max-width:380px;z-index:9999;" +
-    "background:" + style.bg + ";border:2px solid " + style.border + ";" +
-    "border-radius:14px;padding:14px 16px;box-shadow:0 6px 24px rgba(0,0,0,0.18);" +
+    "position:fixed;top:50%;left:50%;transform:translateX(-50%) translateY(-50%);" +
+    "width:88%;max-width:360px;z-index:10000;" +
+    "background:" + tStyle.bg + ";border:2px solid " + tStyle.border + ";" +
+    "border-radius:16px;padding:18px 16px 12px;" +
+    "box-shadow:0 8px 32px rgba(0,0,0,0.22);" +
     "font-family:Arial,sans-serif;animation:toastIn 0.35s ease;";
 
   toast.innerHTML =
-    "<div style='display:flex;align-items:flex-start;gap:10px'>" +
-      "<span style='font-size:26px;line-height:1'>" + style.icon + "</span>" +
+    "<div style='display:flex;align-items:flex-start;gap:10px;margin-bottom:12px'>" +
+      "<span style='font-size:30px;line-height:1'>" + tStyle.icon + "</span>" +
       "<div style='flex:1'>" +
-        (name ? "<div style='font-size:13px;font-weight:700;color:" + style.nameColor + ";margin-bottom:4px'>💪 " + name + ", शाबाश!</div>" : "") +
-        "<div style='font-size:13px;color:#333;line-height:1.5'>" + msg + "</div>" +
+        (name ? "<div style='font-size:14px;font-weight:700;color:" + tStyle.nameColor + ";margin-bottom:5px'>💪 " + name + ", शाबाश!</div>" : "") +
+        "<div style='font-size:13px;color:#333;line-height:1.6'>" + msg + "</div>" +
       "</div>" +
-      "<span onclick='this.parentNode.parentNode.style.display=\"none\"' " +
-        "style='font-size:18px;color:#999;cursor:pointer;margin-left:4px;line-height:1'>✕</span>" +
+    "</div>" +
+    // Progress bar showing 5s countdown
+    "<div style='background:rgba(0,0,0,0.08);border-radius:2px;overflow:hidden;margin-bottom:10px'>" +
+      "<div class='motiv-progress' style='background:" + tStyle.border + "'></div>" +
+    "</div>" +
+    "<div style='text-align:center'>" +
+      "<button onclick='motivDismiss()' style='background:" + tStyle.border + ";color:#fff;" +
+        "border:none;border-radius:8px;padding:7px 28px;font-size:13px;font-weight:700;cursor:pointer'>" +
+        "आगे बढ़ें →</button>" +
     "</div>";
 
-  // Inject keyframe once
-  if (!document.getElementById("toastKeyframe")) {
-    var style2 = document.createElement("style");
-    style2.id = "toastKeyframe";
-    style2.textContent = "@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}";
-    document.head.appendChild(style2);
-  }
+  // Expose dismiss to inline onclick
+  window.motivDismiss = dismiss;
 
   document.body.appendChild(toast);
 
-  // Auto-dismiss after 6 seconds
-  setTimeout(function() {
-    if (toast.parentNode) {
-      toast.style.transition = "opacity 0.4s";
-      toast.style.opacity = "0";
-      setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 400);
-    }
-  }, 6000);
+  // Auto-dismiss after exactly 5 seconds
+  setTimeout(dismiss, 5000);
+}
+
+// Custom in-page save confirmation (replaces native confirm dialog)
+function showSaveConfirm(respMsg, callback) {
+  var old = document.getElementById("saveConfirmModal");
+  if (old) old.parentNode.removeChild(old);
+
+  var modal = document.createElement("div");
+  modal.id = "saveConfirmModal";
+  modal.style.cssText =
+    "position:fixed;top:0;left:0;width:100%;height:100%;z-index:10001;" +
+    "background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;";
+
+  modal.innerHTML =
+    "<div style='background:#fff;border-radius:16px;padding:24px 20px;width:84%;max-width:340px;" +
+      "box-shadow:0 8px 32px rgba(0,0,0,0.25);text-align:center;font-family:Arial,sans-serif'>" +
+      "<div style='font-size:36px;margin-bottom:8px'>✅</div>" +
+      "<div style='font-size:15px;font-weight:700;color:#2e7d32;margin-bottom:6px'>Data Saved!</div>" +
+      "<div style='font-size:13px;color:#555;margin-bottom:20px'>" + (respMsg || "") + "</div>" +
+      "<div style='display:flex;gap:10px'>" +
+        "<button id='scYes' style='flex:1;padding:11px;border:none;border-radius:10px;" +
+          "background:#1565c0;color:#fff;font-size:14px;font-weight:700;cursor:pointer'>➕ New Entry</button>" +
+        "<button id='scNo'  style='flex:1;padding:11px;border:2px solid #ccc;border-radius:10px;" +
+          "background:#fff;color:#333;font-size:14px;font-weight:700;cursor:pointer'>✅ Done</button>" +
+      "</div>" +
+    "</div>";
+
+  document.body.appendChild(modal);
+
+  document.getElementById("scYes").onclick = function() {
+    modal.parentNode.removeChild(modal);
+    callback(true);
+  };
+  document.getElementById("scNo").onclick = function() {
+    modal.parentNode.removeChild(modal);
+    callback(false);
+  };
 }
 </script>
 </body>
