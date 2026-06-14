@@ -1904,6 +1904,21 @@
     <!--  DAILY / MONTHLY REPORT                              -->
     <!-- ════════════════════════════════════════════════════ -->
     <div id="section-report" class="section">
+
+      <!-- Lock Screen -->
+      <div id="rptLockScreen" class="card" style="margin:40px 20px;padding:30px;text-align:center">
+        <div style="font-size:48px;margin-bottom:10px">🔒</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:6px">Report — Admin Only</div>
+        <div style="font-size:13px;color:#888;margin-bottom:16px">Enter password to view team performance report</div>
+        <input type="password" id="rptPasswordInput" placeholder="Password"
+          style="width:100%;padding:10px;border:1.5px solid #ccc;border-radius:8px;font-size:15px;text-align:center;box-sizing:border-box;margin-bottom:10px"
+          onkeydown="if(event.key==='Enter') unlockReport()">
+        <button class="btn-primary" onclick="unlockReport()" style="width:100%">🔓 Unlock</button>
+        <div id="rptLockError" style="color:#c62828;font-size:13px;margin-top:8px;display:none">❌ Incorrect password</div>
+      </div>
+
+      <!-- Report Content (hidden until unlocked) -->
+      <div id="rptContent2" style="display:none">
       <div class="card" style="padding:12px;margin-bottom:10px">
         <div class="card-title" style="margin-bottom:10px">📈 Team Performance Report</div>
         <div class="field-row">
@@ -1943,6 +1958,8 @@
         <button class="btn-primary" onclick="loadReport()" style="margin-top:6px">📊 Load Report</button>
       </div>
       <div id="rptContent" style="padding:0 0 20px"></div>
+      </div><!-- /rptContent2 -->
+
     </div><!-- /section-report -->
 
     <!-- ════════════════════════════════════════════════════ -->
@@ -2399,6 +2416,16 @@ function showTab(tab) {
       document.getElementById("billLockScreen").style.display = "block";
       document.getElementById("billContent").style.display    = "none";
       setTimeout(function(){ document.getElementById("billPasswordInput").focus(); }, 300);
+    }
+  }
+  if (tab === "report") {
+    if (rptUnlocked) {
+      document.getElementById("rptLockScreen").style.display  = "none";
+      document.getElementById("rptContent2").style.display    = "block";
+    } else {
+      document.getElementById("rptLockScreen").style.display  = "block";
+      document.getElementById("rptContent2").style.display    = "none";
+      setTimeout(function(){ document.getElementById("rptPasswordInput").focus(); }, 300);
     }
   }
   if (tab === "service") {
@@ -3852,6 +3879,7 @@ function resetPhotos() {
 // ════════════════════════════════════════════════════════════
 var mapUnlocked     = false;
 var billUnlocked    = false;
+var rptUnlocked     = false;
 var billRecords     = [];
 var billYearsInited = false;
 
@@ -3872,6 +3900,20 @@ function checkBillPassword() {
     setTimeout(function(){
       document.getElementById("billPasswordInput").style.borderColor = "";
     }, 1500);
+  }
+}
+
+function unlockReport() {
+  var entered = document.getElementById("rptPasswordInput").value;
+  var errEl   = document.getElementById("rptLockError");
+  if (entered === "220285") {
+    rptUnlocked = true;
+    document.getElementById("rptLockScreen").style.display = "none";
+    document.getElementById("rptContent2").style.display   = "block";
+  } else {
+    errEl.style.display = "block";
+    document.getElementById("rptPasswordInput").value = "";
+    document.getElementById("rptPasswordInput").focus();
   }
 }
 
