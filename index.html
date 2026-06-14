@@ -1133,6 +1133,9 @@
     <button id="tab-report"   class="tab-btn"          onclick="showTab('report')">
       <span class="tab-icon">📈</span>Report
     </button>
+    <button id="tab-target"   class="tab-btn"          onclick="showTab('target')">
+      <span class="tab-icon">🎯</span>Target
+    </button>
   </div>
 
   <!-- ── SCROLLABLE AREA ─────────────────────────────────── -->
@@ -1963,6 +1966,46 @@
     </div><!-- /section-report -->
 
     <!-- ════════════════════════════════════════════════════ -->
+    <!--  TARGET TRACKER                                      -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-target" class="section">
+
+      <!-- Lock Screen -->
+      <div id="targetLockScreen" class="card" style="margin:40px 20px;padding:30px;text-align:center">
+        <div style="font-size:48px;margin-bottom:10px">🔒</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:6px">Target Tracker — Admin Only</div>
+        <div style="font-size:13px;color:#888;margin-bottom:16px">Enter password to view targets</div>
+        <input type="password" id="targetPasswordInput" placeholder="Password"
+          style="width:100%;padding:10px;border:1.5px solid #ccc;border-radius:8px;font-size:15px;text-align:center;box-sizing:border-box;margin-bottom:10px"
+          onkeydown="if(event.key==='Enter') unlockTarget()">
+        <button class="btn-primary" onclick="unlockTarget()" style="width:100%">🔓 Unlock</button>
+        <div id="targetLockError" style="color:#c62828;font-size:13px;margin-top:8px;display:none">❌ Incorrect password</div>
+      </div>
+
+      <!-- Target Content -->
+      <div id="targetContent" style="display:none;padding-bottom:20px">
+        <div class="card" style="padding:12px;margin-bottom:10px">
+          <div class="card-title" style="margin-bottom:10px">🎯 Target vs Achieved</div>
+          <div class="field-row">
+            <div class="field">
+              <label>Financial Year</label>
+              <select id="targetYear">
+                <option value="2026">FY 2025-26</option>
+                <option value="2027">FY 2026-27</option>
+                <option value="2025">FY 2024-25</option>
+              </select>
+            </div>
+            <div class="field" style="display:flex;align-items:flex-end">
+              <button class="btn-primary" onclick="loadTargetData()" style="width:100%">📊 Load</button>
+            </div>
+          </div>
+        </div>
+        <div id="targetResult"></div>
+      </div>
+
+    </div><!-- /section-target -->
+
+    <!-- ════════════════════════════════════════════════════ -->
     <!--  SERVICE REPORT                                      -->
     <!-- ════════════════════════════════════════════════════ -->
 
@@ -2391,7 +2434,7 @@ window.onload = function() {
 // TABS
 // ════════════════════════════════════════════════════════════
 function showTab(tab) {
-  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap","report"].forEach(function(t) {
+  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap","report","target"].forEach(function(t) {
     document.getElementById("section-" + t).classList.toggle("active", t === tab);
     document.getElementById("tab-" + t).classList.toggle("active", t === tab);
   });
@@ -2426,6 +2469,16 @@ function showTab(tab) {
       document.getElementById("rptLockScreen").style.display  = "block";
       document.getElementById("rptContent2").style.display    = "none";
       setTimeout(function(){ document.getElementById("rptPasswordInput").focus(); }, 300);
+    }
+  }
+  if (tab === "target") {
+    if (targetUnlocked) {
+      document.getElementById("targetLockScreen").style.display = "none";
+      document.getElementById("targetContent").style.display    = "block";
+    } else {
+      document.getElementById("targetLockScreen").style.display = "block";
+      document.getElementById("targetContent").style.display    = "none";
+      setTimeout(function(){ document.getElementById("targetPasswordInput").focus(); }, 300);
     }
   }
   if (tab === "service") {
@@ -3880,6 +3933,7 @@ function resetPhotos() {
 var mapUnlocked     = false;
 var billUnlocked    = false;
 var rptUnlocked     = false;
+var targetUnlocked  = false;
 var billRecords     = [];
 var billYearsInited = false;
 
@@ -3901,6 +3955,111 @@ function checkBillPassword() {
       document.getElementById("billPasswordInput").style.borderColor = "";
     }, 1500);
   }
+}
+
+function unlockTarget() {
+  var entered = document.getElementById("targetPasswordInput").value;
+  if (entered === "220285") {
+    targetUnlocked = true;
+    document.getElementById("targetLockScreen").style.display = "none";
+    document.getElementById("targetContent").style.display    = "block";
+    loadTargetData();
+  } else {
+    document.getElementById("targetLockError").style.display = "block";
+    document.getElementById("targetPasswordInput").value = "";
+    document.getElementById("targetPasswordInput").focus();
+  }
+}
+
+// Quarterly targets (Indian FY: Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar)
+var QUARTER_TARGETS = { Q1: 35, Q2: 11, Q3: 35, Q4: 20 };
+var QUARTER_MONTHS  = { Q1:[4,5,6], Q2:[7,8,9], Q3:[10,11,12], Q4:[1,2,3] };
+var QUARTER_LABELS  = { Q1:"Q1 (Apr–Jun)", Q2:"Q2 (Jul–Sep)", Q3:"Q3 (Oct–Dec)", Q4:"Q4 (Jan–Mar)" };
+
+function loadTargetData() {
+  var fy  = parseInt(document.getElementById("targetYear").value); // e.g. 2026 = FY 2025-26
+  var el  = document.getElementById("targetResult");
+  el.innerHTML = "<div style='text-align:center;padding:24px;color:#888'>⏳ Loading...</div>";
+  gasCall('getTargetData', { fy: fy },
+    function(data) { renderTargetData(data, fy); },
+    function(e)    { el.innerHTML = "<p style='color:red;padding:12px'>❌ " + e.message + "</p>"; }
+  );
+}
+
+function renderTargetData(data, fy) {
+  var el = document.getElementById("targetResult");
+  var totalTarget   = 0;
+  var totalAchieved = 0;
+  Object.keys(QUARTER_TARGETS).forEach(function(q){ totalTarget += QUARTER_TARGETS[q]; });
+
+  // ── Annual summary banner ──
+  ["Q1","Q2","Q3","Q4"].forEach(function(q) {
+    totalAchieved += (data.quarters[q] ? data.quarters[q].total : 0);
+  });
+  var annPct = totalTarget ? Math.round(totalAchieved / totalTarget * 100) : 0;
+  var annGap = Math.max(0, totalTarget - totalAchieved);
+  var annColor = annPct >= 100 ? "#2e7d32" : annPct >= 70 ? "#f57f17" : "#c62828";
+
+  var html =
+    "<div class='card' style='padding:14px 16px;margin-bottom:10px;background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;border-radius:14px'>" +
+      "<div style='font-size:12px;opacity:.85;margin-bottom:4px'>FY " + (fy-1) + "–" + String(fy).slice(2) + " &nbsp;·&nbsp; Annual Target</div>" +
+      "<div style='display:flex;justify-content:space-between;align-items:center'>" +
+        "<div><div style='font-size:32px;font-weight:800'>" + totalAchieved + " <span style='font-size:16px;font-weight:400'>/ " + totalTarget + "</span></div>" +
+          "<div style='font-size:12px;opacity:.85'>Deliveries &nbsp;·&nbsp; Gap: " + annGap + "</div></div>" +
+        "<div style='text-align:center'>" +
+          "<div style='font-size:28px;font-weight:800'>" + annPct + "%</div>" +
+          "<div style='font-size:11px;opacity:.85'>Achieved</div>" +
+        "</div>" +
+      "</div>" +
+      "<div style='background:rgba(255,255,255,.25);border-radius:4px;height:8px;margin-top:10px'>" +
+        "<div style='background:#fff;height:8px;border-radius:4px;width:" + Math.min(annPct,100) + "%'></div>" +
+      "</div>" +
+    "</div>";
+
+  // ── Per-quarter cards ──
+  ["Q1","Q2","Q3","Q4"].forEach(function(q) {
+    var target   = QUARTER_TARGETS[q];
+    var qData    = data.quarters[q] || { total: 0, salesmen: {} };
+    var achieved = qData.total;
+    var pct      = target ? Math.round(achieved / target * 100) : 0;
+    var gap      = Math.max(0, target - achieved);
+    var barColor = pct >= 100 ? "#2e7d32" : pct >= 70 ? "#f9a825" : "#e53935";
+    var bgColor  = pct >= 100 ? "#e8f5e9" : pct >= 70 ? "#fff8e1" : "#fce4ec";
+
+    html += "<div class='card' style='margin-bottom:10px;padding:14px 16px;background:" + bgColor + "'>";
+
+    // Quarter header
+    html += "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px'>" +
+      "<div>" +
+        "<div style='font-weight:700;font-size:15px'>" + QUARTER_LABELS[q] + "</div>" +
+        "<div style='font-size:12px;color:#555;margin-top:2px'>Target: <b>" + target + "</b> &nbsp;·&nbsp; Achieved: <b>" + achieved + "</b> &nbsp;·&nbsp; Gap: <b style='color:" + (gap>0?"#c62828":"#2e7d32") + "'>" + (gap > 0 ? gap : "✅ Done") + "</b></div>" +
+      "</div>" +
+      "<div style='font-size:26px;font-weight:800;color:" + barColor + "'>" + pct + "%</div>" +
+    "</div>";
+
+    // Progress bar
+    html += "<div style='background:rgba(0,0,0,.1);border-radius:4px;height:10px;margin-bottom:10px'>" +
+      "<div style='background:" + barColor + ";height:10px;border-radius:4px;width:" + Math.min(pct,100) + "%;transition:width .6s'></div></div>";
+
+    // Per-salesman breakdown
+    var salesmen = qData.salesmen || {};
+    var names = Object.keys(salesmen).sort(function(a,b){ return salesmen[b]-salesmen[a]; });
+    if (names.length > 0) {
+      html += "<div style='display:flex;flex-wrap:wrap;gap:6px'>";
+      names.forEach(function(name) {
+        var cnt = salesmen[name];
+        html += "<span style='background:rgba(255,255,255,.7);border-radius:10px;padding:3px 10px;" +
+          "font-size:12px;font-weight:600;color:#333'>" + name + ": " + cnt + "</span>";
+      });
+      html += "</div>";
+    } else {
+      html += "<div style='font-size:12px;color:#999;font-style:italic'>No deliveries yet</div>";
+    }
+
+    html += "</div>";
+  });
+
+  el.innerHTML = html;
 }
 
 function unlockReport() {
