@@ -1130,6 +1130,9 @@
     <button id="tab-fieldmap"  class="tab-btn"          onclick="showTab('fieldmap')">
       <span class="tab-icon">🗺️</span>Map
     </button>
+    <button id="tab-report"   class="tab-btn"          onclick="showTab('report')">
+      <span class="tab-icon">📈</span>Report
+    </button>
   </div>
 
   <!-- ── SCROLLABLE AREA ─────────────────────────────────── -->
@@ -1190,10 +1193,10 @@
               <option value="">Select</option>
               <option>Field</option>
               <option>Demo</option>
-              <option>Display</option>
-              <option>Calling</option>
-              <option>Office Work</option>
+              <option>Display+Canopy</option>
+              <option>Service Camp</option>
               <option>Showroom</option>
+              <option>Office Work</option>
               <option>Tractor Service-At Field</option>
               <option>Tractor Service-At Showroom</option>
             </select>
@@ -1898,6 +1901,51 @@
     </div><!-- /section-fieldmap -->
 
     <!-- ════════════════════════════════════════════════════ -->
+    <!--  DAILY / MONTHLY REPORT                              -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-report" class="section">
+      <div class="card" style="padding:12px;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:10px">📈 Team Performance Report</div>
+        <div class="field-row">
+          <div class="field">
+            <label>Month</label>
+            <select id="rptMonth">
+              <option value="0">All Months</option>
+              <option value="1">January</option><option value="2">February</option>
+              <option value="3">March</option><option value="4">April</option>
+              <option value="5">May</option><option value="6">June</option>
+              <option value="7">July</option><option value="8">August</option>
+              <option value="9">September</option><option value="10">October</option>
+              <option value="11">November</option><option value="12">December</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Year</label>
+            <select id="rptYear">
+              <option value="2026">2026</option>
+              <option value="2025">2025</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>View</label>
+            <select id="rptView">
+              <option value="summary">Team Summary</option>
+              <option value="daily">Day-wise Detail</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Date (for Day-wise)</label>
+            <input type="date" id="rptDate">
+          </div>
+        </div>
+        <button class="btn-primary" onclick="loadReport()" style="margin-top:6px">📊 Load Report</button>
+      </div>
+      <div id="rptContent" style="padding:0 0 20px"></div>
+    </div><!-- /section-report -->
+
+    <!-- ════════════════════════════════════════════════════ -->
     <!--  SERVICE REPORT                                      -->
     <!-- ════════════════════════════════════════════════════ -->
 
@@ -2326,7 +2374,7 @@ window.onload = function() {
 // TABS
 // ════════════════════════════════════════════════════════════
 function showTab(tab) {
-  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap"].forEach(function(t) {
+  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap","report"].forEach(function(t) {
     document.getElementById("section-" + t).classList.toggle("active", t === tab);
     document.getElementById("tab-" + t).classList.toggle("active", t === tab);
   });
@@ -4425,17 +4473,19 @@ function renderFieldMap(data) {
         html: '<div style="background:' + color + ';color:#fff;border-radius:50%;' +
               'width:36px;height:36px;display:flex;align-items:center;justify-content:center;' +
               'font-weight:700;font-size:13px;border:3px solid #fff;' +
-              'box-shadow:0 2px 6px rgba(0,0,0,0.4)">' + v.count + '</div>',
+              'box-shadow:0 2px 6px rgba(0,0,0,0.4)">' + v.uniqueCustomers + '</div>',
         iconSize: [36, 36], iconAnchor: [18, 18]
       });
 
       var popupHtml = "<b style='font-size:14px'>📍 " + v.village + "</b><br>" +
-        "<div style='margin-top:6px;font-size:12px'>";
+        "<div style='margin-top:6px;font-size:12px'>" +
+        "<b>" + v.uniqueCustomers + " unique customers</b>" +
+        (v.count !== v.uniqueCustomers ? " <small style='color:#999'>(" + v.count + " visits)</small>" : "") +
+        "<br>";
       Object.keys(v.statuses).forEach(function(s) {
         var c = STATUS_COLORS[s] || "#666";
         popupHtml += "<span style='color:" + c + ";font-weight:600'>" + s + ":</span> " + v.statuses[s] + " &nbsp;";
       });
-      popupHtml += "<br><b>Total: " + v.count + " customers</b>";
       popupHtml += "<br><small style='color:#666'>Team: " + Object.keys(v.salesmen).join(", ") + "</small></div>";
 
       L.marker([v.lat, v.lng], { icon: icon }).addTo(leafletMap).bindPopup(popupHtml);
@@ -4489,21 +4539,20 @@ function renderFieldMap(data) {
     // ── Village-wise table (default view) ──
     html += "<div class='card-title' style='padding:10px 0 8px'>📋 Village-wise Summary</div>";
     html += "<div style='overflow-x:auto'><table class='dash-table' style='font-size:13px'>";
-    html += "<tr><th>#</th><th>Village</th><th>Customers</th><th>Top Status</th><th>Team</th><th>View</th></tr>";
+    html += "<tr><th>#</th><th>Village</th><th>Unique</th><th>Visits</th><th>Top Status</th><th>Team</th><th>View</th></tr>";
 
     data.villages.forEach(function(v, idx) {
       var topStatus = Object.keys(v.statuses).sort(function(a,b){
         return v.statuses[b] - v.statuses[a];
       })[0] || "—";
       var color = STATUS_COLORS[topStatus] || "#666";
-      var salesStr = Object.keys(v.salesmen).map(function(s) {
-        return s + "(" + v.salesmen[s] + ")";
-      }).join(", ");
+      var salesStr = Object.keys(v.salesmen).join(", ");
 
       html += "<tr>" +
         "<td>" + (idx+1) + "</td>" +
         "<td><b>" + v.village + "</b></td>" +
-        "<td style='text-align:center;font-weight:700'>" + v.count + "</td>" +
+        "<td style='text-align:center;font-weight:700;color:#1565c0'>" + v.uniqueCustomers + "</td>" +
+        "<td style='text-align:center;color:#888;font-size:11px'>" + v.count + "</td>" +
         "<td><span style='color:" + color + ";font-weight:600'>" + topStatus + "</span></td>" +
         "<td style='font-size:11px;color:#555'>" + salesStr + "</td>" +
         "<td><a href='https://maps.google.com/?q=" + v.lat + "," + v.lng +
@@ -4514,6 +4563,115 @@ function renderFieldMap(data) {
   }
 
   tableEl.innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════════════
+// TEAM PERFORMANCE REPORT
+// ════════════════════════════════════════════════════════════
+function loadReport() {
+  var month   = document.getElementById("rptMonth").value;
+  var year    = document.getElementById("rptYear").value;
+  var view    = document.getElementById("rptView").value;
+  var date    = document.getElementById("rptDate").value;
+  var el      = document.getElementById("rptContent");
+
+  el.innerHTML = "<div style='text-align:center;padding:24px;color:#888'>⏳ Loading report...</div>";
+
+  gasCall('getReportData', { month: month, year: year, date: date },
+    function(data) { renderReport(data, view, date); },
+    function(e)    { el.innerHTML = "<p style='color:red;padding:12px'>❌ " + e.message + "</p>"; }
+  );
+}
+
+function renderReport(data, view, date) {
+  var el = document.getElementById("rptContent");
+  if (!data || !data.members || data.members.length === 0) {
+    el.innerHTML = "<div class='card' style='text-align:center;padding:20px;color:#999'>No data found for selected period.</div>";
+    return;
+  }
+
+  var STATUS_C = { Hot:"#e65100", Warm:"#f9a825", Cold:"#1565c0", Contacted:"#2e7d32",
+                   Delivered:"#6a1b9a", Closed:"#37474f", "Sales Lost":"#c62828" };
+  var html = "";
+
+  if (view === "daily" && date && data.daily) {
+    // ── Day-wise detail ──
+    html += "<div class='card' style='padding:10px 12px;margin-bottom:8px;background:#e3f2fd'>" +
+      "<b style='color:#1565c0'>📅 " + date + " — Day Summary</b>" +
+      "<span style='float:right;font-size:13px;color:#555'>" + data.daily.total + " entries</span></div>";
+
+    data.members.forEach(function(m) {
+      if (!m.dayEntries || m.dayEntries.length === 0) return;
+      html += "<div class='card' style='margin-bottom:10px;padding:10px 12px'>";
+      html += "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px'>" +
+        "<b style='font-size:14px'>👤 " + m.name + "</b>" +
+        "<span style='background:#1565c0;color:#fff;border-radius:12px;padding:2px 10px;font-size:12px'>" +
+          m.dayEntries.length + " entries</span></div>";
+      html += "<div style='overflow-x:auto'><table class='dash-table' style='font-size:12px'>";
+      html += "<tr><th>Time</th><th>Customer</th><th>Village</th><th>Activity</th><th>Status</th></tr>";
+      m.dayEntries.forEach(function(e) {
+        var c = STATUS_C[e.status] || "#666";
+        html += "<tr><td style='white-space:nowrap'>" + (e.time||"—") + "</td>" +
+          "<td>" + (e.customer||"—") + "</td><td>" + (e.village||"—") + "</td>" +
+          "<td style='font-size:11px'>" + (e.activity||"—") + "</td>" +
+          "<td><span style='color:" + c + ";font-weight:600'>" + (e.status||"—") + "</span></td></tr>";
+      });
+      html += "</table></div></div>";
+    });
+
+  } else {
+    // ── Team Summary ──
+    var period = data.periodLabel || "";
+    html += "<div class='card' style='padding:10px 12px;margin-bottom:8px;background:#e8f5e9'>" +
+      "<b style='color:#2e7d32'>📊 Team Summary — " + period + "</b>" +
+      "<span style='float:right;font-size:13px;color:#555'>Total: " + data.grandTotal + " entries</span></div>";
+
+    // Grand total KPIs
+    html += "<div style='display:flex;gap:8px;overflow-x:auto;padding:0 0 10px'>";
+    ["Hot","Warm","Cold","Contacted","Delivered"].forEach(function(s) {
+      if (!data.totals[s]) return;
+      html += "<div class='card' style='min-width:80px;text-align:center;padding:10px 8px;flex-shrink:0'>" +
+        "<div style='font-size:20px;font-weight:700;color:" + STATUS_C[s] + "'>" + data.totals[s] + "</div>" +
+        "<div style='font-size:10px;color:#666'>" + s + "</div></div>";
+    });
+    html += "</div>";
+
+    // Per member cards
+    data.members.forEach(function(m) {
+      if (m.total === 0) return;
+      html += "<div class='card' style='margin-bottom:10px;padding:10px 12px'>";
+      html += "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px'>" +
+        "<b style='font-size:14px'>👤 " + m.name + "</b>" +
+        "<span style='background:#1565c0;color:#fff;border-radius:12px;padding:2px 10px;font-size:12px'>" +
+          m.total + " entries</span></div>";
+
+      // Status breakdown bar
+      html += "<div style='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px'>";
+      ["Hot","Warm","Cold","Contacted","Delivered","Closed","Sales Lost"].forEach(function(s) {
+        if (!m[s]) return;
+        html += "<span style='background:" + STATUS_C[s] + "22;color:" + STATUS_C[s] + ";" +
+          "border:1px solid " + STATUS_C[s] + "44;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600'>" +
+          s + ": " + m[s] + "</span>";
+      });
+      html += "</div>";
+
+      // Activity breakdown
+      if (m.activities && Object.keys(m.activities).length) {
+        html += "<div style='font-size:11px;color:#555;margin-bottom:4px'><b>Activities:</b> ";
+        html += Object.keys(m.activities).map(function(a) {
+          return a + " (" + m.activities[a] + ")";
+        }).join(" &nbsp;·&nbsp; ");
+        html += "</div>";
+      }
+
+      // Villages visited
+      html += "<div style='font-size:11px;color:#888'>📍 " + m.villageCount + " villages &nbsp;·&nbsp; " +
+        "🔄 " + m.updates + " follow-ups</div>";
+      html += "</div>";
+    });
+  }
+
+  el.innerHTML = html;
 }
 
 // ── Motivation toast after form save ──────────────────────────
