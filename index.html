@@ -89,7 +89,7 @@
 
   // ── gasCall() — replaces all google.script.run calls ──────
   function gasCall(action, params, onSuccess, onFailure) {
-    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride'].indexOf(action) !== -1;
+    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride','saveDelivery'].indexOf(action) !== -1;
     var promise;
     if (isWrite) {
       // POST for write operations (image uploads etc.)
@@ -1136,6 +1136,9 @@
     <button id="tab-target"   class="tab-btn"          onclick="showTab('target')">
       <span class="tab-icon">🎯</span>Target
     </button>
+    <button id="tab-delivery" class="tab-btn"          onclick="showTab('delivery')">
+      <span class="tab-icon">🚚</span>Delivery
+    </button>
   </div>
 
   <!-- ── SCROLLABLE AREA ─────────────────────────────────── -->
@@ -2006,6 +2009,100 @@
     </div><!-- /section-target -->
 
     <!-- ════════════════════════════════════════════════════ -->
+    <!--  DELIVERY                                            -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-delivery" class="section">
+
+      <!-- Lock Screen -->
+      <div id="deliveryLockScreen" class="card" style="margin:40px 20px;padding:30px;text-align:center">
+        <div style="font-size:48px;margin-bottom:10px">🔒</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:6px">Delivery — Admin Only</div>
+        <div style="font-size:13px;color:#888;margin-bottom:16px">Enter password to mark deliveries</div>
+        <input type="password" id="deliveryPasswordInput" placeholder="Password"
+          style="width:100%;padding:10px;border:1.5px solid #ccc;border-radius:8px;font-size:15px;text-align:center;box-sizing:border-box;margin-bottom:10px"
+          onkeydown="if(event.key==='Enter') unlockDelivery()">
+        <button class="btn-primary" onclick="unlockDelivery()" style="width:100%">🔓 Unlock</button>
+        <div id="deliveryLockError" style="color:#c62828;font-size:13px;margin-top:8px;display:none">❌ Incorrect password</div>
+      </div>
+
+      <!-- Delivery Content -->
+      <div id="deliveryContent" style="display:none">
+
+        <!-- Search Card -->
+        <div class="card" style="padding:12px;margin-bottom:10px">
+          <div class="card-title" style="margin-bottom:10px">🔍 Search Customer</div>
+          <div class="field-row">
+            <div class="field">
+              <label>Mobile / Customer Name</label>
+              <input type="text" id="dlvSearchInput" placeholder="Enter mobile or name"
+                inputmode="text"
+                onkeydown="if(event.key==='Enter') searchDeliveryCustomer()">
+            </div>
+          </div>
+          <button class="btn-primary" onclick="searchDeliveryCustomer()" style="margin-top:6px;width:100%">🔍 Search</button>
+          <div id="dlvSearchResults" style="margin-top:10px"></div>
+        </div>
+
+        <!-- Delivery Form (hidden until customer selected) -->
+        <div id="dlvForm" style="display:none">
+          <div class="card" style="padding:14px;margin-bottom:10px;background:#e8f5e9;border-left:4px solid #2e7d32">
+            <div style="font-size:13px;font-weight:700;color:#2e7d32;margin-bottom:2px">✅ Selected Customer</div>
+            <div id="dlvCustomerInfo" style="font-size:13px;color:#333"></div>
+          </div>
+
+          <div class="card" style="padding:12px">
+            <div class="card-title" style="margin-bottom:10px">🚚 Delivery Details</div>
+
+            <div class="field-row">
+              <div class="field">
+                <label>Delivered Model <span style="color:#c62828">*</span></label>
+                <input type="text" id="dlvModel" placeholder="e.g. Swaraj 744 FE">
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label>Chassis No. <span style="color:#c62828">* 17 chars</span></label>
+                <input type="text" id="dlvChasis" maxlength="17"
+                  style="text-transform:uppercase"
+                  oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
+                  placeholder="17-character Chassis No.">
+                <div id="dlvChasisError" style="color:#c62828;font-size:11px;margin-top:3px;display:none">⚠️ Chassis No. must be exactly 17 characters</div>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label>Sale Amount (₹) <span style="color:#c62828">*</span></label>
+                <input type="number" id="dlvAmount" placeholder="e.g. 850000" inputmode="numeric">
+              </div>
+              <div class="field">
+                <label>Delivery Date</label>
+                <input type="date" id="dlvDate">
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label>Remark</label>
+                <input type="text" id="dlvRemark" placeholder="Optional note">
+              </div>
+            </div>
+
+            <input type="hidden" id="dlvMobile">
+            <input type="hidden" id="dlvRowRef">
+
+            <button class="btn-primary" id="dlvSaveBtn" onclick="saveDelivery()"
+              style="width:100%;margin-top:8px;background:#2e7d32">
+              🚚 Mark as Delivered
+            </button>
+          </div>
+        </div>
+
+      </div><!-- /deliveryContent -->
+    </div><!-- /section-delivery -->
+
+    <!-- ════════════════════════════════════════════════════ -->
     <!--  SERVICE REPORT                                      -->
     <!-- ════════════════════════════════════════════════════ -->
 
@@ -2434,7 +2531,7 @@ window.onload = function() {
 // TABS
 // ════════════════════════════════════════════════════════════
 function showTab(tab) {
-  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap","report","target"].forEach(function(t) {
+  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap","report","target","delivery"].forEach(function(t) {
     document.getElementById("section-" + t).classList.toggle("active", t === tab);
     document.getElementById("tab-" + t).classList.toggle("active", t === tab);
   });
@@ -2479,6 +2576,16 @@ function showTab(tab) {
       document.getElementById("targetLockScreen").style.display = "block";
       document.getElementById("targetContent").style.display    = "none";
       setTimeout(function(){ document.getElementById("targetPasswordInput").focus(); }, 300);
+    }
+  }
+  if (tab === "delivery") {
+    if (deliveryUnlocked) {
+      document.getElementById("deliveryLockScreen").style.display = "none";
+      document.getElementById("deliveryContent").style.display    = "block";
+    } else {
+      document.getElementById("deliveryLockScreen").style.display = "block";
+      document.getElementById("deliveryContent").style.display    = "none";
+      setTimeout(function(){ document.getElementById("deliveryPasswordInput").focus(); }, 300);
     }
   }
   if (tab === "service") {
@@ -3933,7 +4040,8 @@ function resetPhotos() {
 var mapUnlocked     = false;
 var billUnlocked    = false;
 var rptUnlocked     = false;
-var targetUnlocked  = false;
+var targetUnlocked   = false;
+var deliveryUnlocked = false;
 var billRecords     = [];
 var billYearsInited = false;
 
@@ -3955,6 +4063,140 @@ function checkBillPassword() {
       document.getElementById("billPasswordInput").style.borderColor = "";
     }, 1500);
   }
+}
+
+// ════════════════════════════════════════════════════════════
+// DELIVERY TAB
+// ════════════════════════════════════════════════════════════
+function unlockDelivery() {
+  var entered = document.getElementById("deliveryPasswordInput").value;
+  if (entered === "220285") {
+    deliveryUnlocked = true;
+    document.getElementById("deliveryLockScreen").style.display = "none";
+    document.getElementById("deliveryContent").style.display    = "block";
+  } else {
+    document.getElementById("deliveryLockError").style.display = "block";
+    document.getElementById("deliveryPasswordInput").value = "";
+    document.getElementById("deliveryPasswordInput").focus();
+  }
+}
+
+function searchDeliveryCustomer() {
+  var q = document.getElementById("dlvSearchInput").value.trim();
+  if (!q) { showToast("❌ Enter mobile or customer name", 2500, "#c62828"); return; }
+
+  var resultsEl = document.getElementById("dlvSearchResults");
+  resultsEl.innerHTML = "<div style='color:#888;font-size:13px;padding:8px 0'>⏳ Searching...</div>";
+  document.getElementById("dlvForm").style.display = "none";
+
+  gasCall('searchCustomersAdvanced', { query: { searchText: q, salesman: "All", status: "All" } },
+    function(rows) {
+      if (!Array.isArray(rows) || rows.length === 0) {
+        resultsEl.innerHTML = "<div style='color:#999;font-size:13px;padding:8px 0'>No customers found.</div>";
+        return;
+      }
+      // mapCustomer fields: enquiryType=status, rate=amount, chasis=chasis
+      var mapped = rows.map(function(r) {
+        return {
+          customerName: r.customerName || "",
+          mobile:       r.mobile       || "",
+          village:      r.village      || "",
+          salesman:     r.salesman     || r.mechanicName || "",
+          status:       r.enquiryType  || "",
+          model:        r.model        || "",
+          chasis:       r.chasis       || "",
+          amount:       r.rate         || ""
+        };
+      });
+      var html = "";
+      mapped.forEach(function(r, idx) {
+        var statusColor = r.status === "Delivered" ? "#2e7d32" : "#1565c0";
+        html += "<div onclick='selectDeliveryCustomer(" + idx + ")' " +
+          "style='border:1.5px solid #e0e0e0;border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;background:#fff'>" +
+          "<div style='font-weight:700;font-size:13px'>" + (r.customerName || "—") +
+            " <span style='font-size:11px;color:#888'>📱 " + (r.mobile || "—") + "</span></div>" +
+          "<div style='font-size:12px;color:#555;margin-top:3px'>📍 " + (r.village || "—") +
+            " &nbsp;·&nbsp; 👤 " + (r.salesman || "—") + "</div>" +
+          "<div style='font-size:12px;margin-top:3px'>" +
+            "<span style='color:" + statusColor + ";font-weight:600'>" + (r.status || "—") + "</span>" +
+            " &nbsp;·&nbsp; 🚜 " + (r.model || "—") + "</div>" +
+          "</div>";
+      });
+      resultsEl.innerHTML = html;
+      window._dlvRows = mapped;
+    },
+    function(e) {
+      resultsEl.innerHTML = "<div style='color:red;font-size:13px'>❌ " + e.message + "</div>";
+    }
+  );
+}
+
+function selectDeliveryCustomer(idx) {
+  var r = window._dlvRows[idx];
+  // Show form, hide results
+  document.getElementById("dlvSearchResults").innerHTML = "";
+  document.getElementById("dlvForm").style.display = "block";
+
+  // Fill customer info banner
+  document.getElementById("dlvCustomerInfo").innerHTML =
+    "<b>" + (r.customerName || "—") + "</b> &nbsp; 📱 " + (r.mobile || "—") +
+    "<br>📍 " + (r.village || "—") + " &nbsp;·&nbsp; 👤 " + (r.salesman || "—") +
+    "<br>Current Status: <b style='color:" + (r.status==="Delivered"?"#2e7d32":"#e65100") + "'>" + (r.status || "—") + "</b>";
+
+  // Pre-fill known fields
+  document.getElementById("dlvModel").value  = r.model  || "";
+  document.getElementById("dlvChasis").value = r.chasis || "";
+  document.getElementById("dlvAmount").value = r.amount || "";
+  document.getElementById("dlvMobile").value = r.mobile || "";
+
+  // Default delivery date to today
+  var today = new Date();
+  document.getElementById("dlvDate").value =
+    today.getFullYear() + "-" +
+    String(today.getMonth()+1).padStart(2,"0") + "-" +
+    String(today.getDate()).padStart(2,"0");
+
+  document.getElementById("dlvChasisError").style.display = "none";
+  window.scrollTo(0, document.getElementById("dlvForm").offsetTop - 60);
+}
+
+function saveDelivery() {
+  var model  = document.getElementById("dlvModel").value.trim();
+  var chasis = document.getElementById("dlvChasis").value.replace(/[^A-Z0-9]/gi,"").toUpperCase();
+  var amount = document.getElementById("dlvAmount").value.trim();
+  var date   = document.getElementById("dlvDate").value;
+  var mobile = document.getElementById("dlvMobile").value.trim();
+  var remark = document.getElementById("dlvRemark").value.trim();
+
+  if (!model)  { showToast("❌ Model is required", 2500, "#c62828"); document.getElementById("dlvModel").focus(); return; }
+  if (chasis.length !== 17) {
+    document.getElementById("dlvChasisError").style.display = "block";
+    showToast("❌ Chassis No. must be exactly 17 characters", 2500, "#c62828");
+    document.getElementById("dlvChasis").focus(); return;
+  }
+  document.getElementById("dlvChasisError").style.display = "none";
+  if (!amount) { showToast("❌ Sale amount is required", 2500, "#c62828"); document.getElementById("dlvAmount").focus(); return; }
+
+  var btn = document.getElementById("dlvSaveBtn");
+  btn.disabled = true;
+  btn.textContent = "⏳ Saving...";
+
+  gasCall('saveDelivery', { mobile: mobile, model: model, chasis: chasis, amount: amount, date: date, remark: remark },
+    function(resp) {
+      btn.disabled = false;
+      btn.textContent = "🚚 Mark as Delivered";
+      showToast("✅ " + resp, 3000, "#2e7d32");
+      // Reset form
+      document.getElementById("dlvForm").style.display = "none";
+      document.getElementById("dlvSearchInput").value  = "";
+      document.getElementById("dlvRemark").value       = "";
+    },
+    function(e) {
+      btn.disabled = false;
+      btn.textContent = "🚚 Mark as Delivered";
+      showToast("❌ Error: " + e.message, 3500, "#c62828");
+    }
+  );
 }
 
 function unlockTarget() {
