@@ -1315,25 +1315,6 @@
 
       <div class="quote-box" id="quoteBox"></div>
 
-      <!-- NOTIFICATION PERMISSION BANNER -->
-      <div id="notifBanner" style="display:none;background:linear-gradient(135deg,#f3e5f5,#e1bee7);border-left:4px solid #7b1fa2;border-radius:10px;padding:14px;margin:8px 12px;">
-        <div style="font-weight:700;font-size:15px;color:#4a148c;margin-bottom:6px;">🔔 रिमाइंडर चालू करें</div>
-        <div style="font-size:13px;color:#4a148c;margin-bottom:10px;">दिन में 3 बार याद दिलाएगा — सुबह 9 बजे, दोपहर 1 बजे, शाम 5:30 बजे — जब फील्ड एंट्री बाकी हो।</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <select id="notifSalesmanPick" style="flex:1;min-width:140px;padding:8px 10px;border-radius:8px;border:1px solid #ce93d8;font-size:14px;background:#fff;color:#4a148c;">
-            <option value="">-- अपना नाम चुनें --</option>
-          </select>
-          <button onclick="enableNotifications()" style="background:#7b1fa2;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:14px;font-weight:700;cursor:pointer;">✅ चालू करें</button>
-          <button onclick="dismissNotifBanner()" style="background:#fff;color:#7b1fa2;border:1px solid #ce93d8;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;">बाद में</button>
-        </div>
-      </div>
-
-      <!-- NOTIFICATION ACTIVE STRIP -->
-      <div id="notifActiveStrip" style="display:none;background:#f3e5f5;border-radius:8px;padding:8px 12px;margin:6px 12px;font-size:13px;color:#6a1b9a;display:flex;align-items:center;justify-content:space-between;">
-        <span>🔔 रिमाइंडर चालू है — <b id="notifActiveName"></b></span>
-        <button onclick="disableNotifications()" style="background:none;border:none;color:#9c4dcc;font-size:12px;cursor:pointer;text-decoration:underline;">बंद करें</button>
-      </div>
-
       <!-- GPS FIELD INSTRUCTION BANNER -->
       <div id="gpsInstructionBanner" style="background:linear-gradient(135deg,#e3f2fd,#bbdefb);border-left:4px solid #1565c0;border-radius:10px;padding:14px 14px;margin:8px 12px;font-size:14px;color:#0d47a1;">
         <div style="font-weight:700;font-size:15px;margin-bottom:8px;">📍 लाइव लोकेशन ट्रैकिंग चालू है</div>
@@ -2469,37 +2450,32 @@
             <div style="background:#f8f9ff;border:1.5px solid #c5cae9;border-radius:10px;padding:14px;margin-bottom:14px;">
               <div style="font-weight:700;font-size:13px;color:#1565c0;margin-bottom:10px;" id="ruleFormTitle">+ New Rule</div>
               <input type="hidden" id="ruleEditId">
-              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;align-items:center;">
-                <span style="font-size:12px;font-weight:700;color:#555;white-space:nowrap;">IF past</span>
-                <select id="ruleIfActivity" style="flex:1;min-width:120px;padding:7px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;">
-                  <option>Field</option><option>Demo</option><option>Display+Canopy</option>
-                  <option>Service Camp</option><option>Showroom</option>
-                  <option>Tractor Service-At Field</option><option>Tractor Service-At Showroom</option>
-                </select>
-                <select id="ruleOperator" style="flex:1;min-width:110px;padding:7px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;">
-                  <option value=">=">≥ at least</option>
-                  <option value="<=">≤ at most</option>
-                  <option value="=">= exactly</option>
-                  <option value="=0">= 0 (never done)</option>
-                </select>
-                <select id="ruleCount" style="width:70px;padding:7px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;">
-                  <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
-                </select>
-                <span style="font-size:12px;font-weight:700;color:#555;white-space:nowrap;">times in past</span>
-                <select id="ruleMonths" style="width:90px;padding:7px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;">
-                  <option value="1">1 month</option><option value="2">2 months</option>
-                  <option value="3">3 months</option><option value="6">6 months</option>
-                  <option value="12">12 months</option>
-                </select>
+
+              <!-- Conditions list -->
+              <div id="ruleConditions" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+
+              <!-- Logic op + Add condition -->
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+                <span style="font-size:12px;color:#555;font-weight:600;">Conditions joined by:</span>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;font-weight:700;">
+                  <input type="radio" name="ruleLogicOp" value="AND" checked style="cursor:pointer;"> AND (सभी conditions सच हों)
+                </label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;font-weight:700;">
+                  <input type="radio" name="ruleLogicOp" value="OR" style="cursor:pointer;"> OR (कोई एक condition सच हो)
+                </label>
+                <button onclick="addRuleCondition()" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;">+ Add Condition</button>
               </div>
-              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
-                <span style="font-size:12px;font-weight:700;color:#555;white-space:nowrap;">→ PLAN</span>
-                <select id="ruleThenActivity" style="flex:1;min-width:120px;padding:7px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;">
+
+              <!-- Then -->
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;">
+                <span style="font-size:12px;font-weight:700;color:#2e7d32;white-space:nowrap;">→ PLAN</span>
+                <select id="ruleThenActivity" style="flex:1;min-width:130px;padding:7px;border:1.5px solid #a5d6a7;border-radius:7px;font-size:12px;background:#f1f8e9;">
                   <option>Demo</option><option>Field</option><option>Display+Canopy</option>
-                  <option>Service Camp</option><option>Tractor Service-At Field</option>
+                  <option>Service Camp</option><option>Tractor Service-At Field</option><option>Tractor Service-At Showroom</option>
                 </select>
                 <span style="font-size:12px;font-weight:700;color:#555;white-space:nowrap;">for this village</span>
               </div>
+
               <div style="display:flex;gap:8px;">
                 <button onclick="saveRule()" style="background:#2e7d32;color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">💾 Save Rule</button>
                 <button onclick="cancelRuleEdit()" id="ruleCancelBtn" style="display:none;background:#fff;color:#555;border:1.5px solid #ccc;border-radius:7px;padding:8px 14px;font-size:12px;cursor:pointer;">Cancel</button>
@@ -3081,8 +3057,7 @@ window.onload = function() {
     showToast("👋 Welcome to RKT CRM!", 2500, "#1565c0");
   }
 
-  // Notification reminders setup
-  initNotifUI();
+  // (WhatsApp reminders managed from Team tab — no self-signup here)
 };
 
 // ════════════════════════════════════════════════════════════
@@ -6029,6 +6004,7 @@ function plannerOnOpen() {
     dl.appendChild(o);
   });
 
+  addRuleCondition(); // seed one blank condition row in rule builder
   loadVillages();
   loadRules();
 }
@@ -6150,41 +6126,122 @@ function loadRules() {
   });
 }
 
+// ── Condition row HTML builder ───────────────────────────────
+var ACT_OPTIONS = ['Field','Demo','Display+Canopy','Service Camp','Showroom','Tractor Service-At Field','Tractor Service-At Showroom'];
+var OPS_MAP = { '>=': '≥ at least', '<=': '≤ at most', '=': '= exactly', '=0': '= 0 (never done)' };
+
+function conditionRowHTML(idx, cond) {
+  cond = cond || { ifActivity:'Field', operator:'>=', count:1, months:3 };
+  var actOpts = ACT_OPTIONS.map(function(a){ return '<option' + (a === cond.ifActivity ? ' selected' : '') + '>' + a + '</option>'; }).join('');
+  var opOpts  = Object.keys(OPS_MAP).map(function(k){ return '<option value="' + k + '"' + (k === cond.operator ? ' selected' : '') + '>' + OPS_MAP[k] + '</option>'; }).join('');
+  var cntOpts = [1,2,3,4,5].map(function(n){ return '<option' + (n == cond.count ? ' selected' : '') + '>' + n + '</option>'; }).join('');
+  var mnOpts  = [[1,'1 month'],[2,'2 months'],[3,'3 months'],[6,'6 months'],[12,'12 months']].map(function(m){ return '<option value="' + m[0] + '"' + (m[0] == cond.months ? ' selected' : '') + '>' + m[1] + '</option>'; }).join('');
+  var isZero  = cond.operator === '=0';
+  return '<div class="cond-row" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:#fff;border:1.5px solid #e8eaf6;border-radius:8px;padding:8px 10px;">'
+    + '<span style="font-size:11px;font-weight:700;color:#555;white-space:nowrap;">IF</span>'
+    + '<select class="cond-activity" style="flex:1;min-width:110px;padding:6px;border:1.5px solid #c5cae9;border-radius:6px;font-size:12px;">' + actOpts + '</select>'
+    + '<select class="cond-op" onchange="toggleCountVis(this)" style="flex:1;min-width:100px;padding:6px;border:1.5px solid #c5cae9;border-radius:6px;font-size:12px;">' + opOpts + '</select>'
+    + '<select class="cond-count" style="width:60px;padding:6px;border:1.5px solid #c5cae9;border-radius:6px;font-size:12px;' + (isZero ? 'display:none;' : '') + '">' + cntOpts + '</select>'
+    + '<span class="cond-times" style="font-size:11px;font-weight:600;color:#555;white-space:nowrap;' + (isZero ? 'display:none;' : '') + '">times in</span>'
+    + '<select class="cond-months" style="width:80px;padding:6px;border:1.5px solid #c5cae9;border-radius:6px;font-size:12px;">' + mnOpts + '</select>'
+    + (idx > 0 ? '<button onclick="removeCondRow(this)" style="background:#fce4ec;color:#c62828;border:none;border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;flex-shrink:0;">✕</button>' : '<span style="width:30px;"></span>')
+    + '</div>';
+}
+
+function toggleCountVis(opSel) {
+  var row    = opSel.closest('.cond-row');
+  var isZero = opSel.value === '=0';
+  row.querySelector('.cond-count').style.display = isZero ? 'none' : '';
+  row.querySelector('.cond-times').style.display = isZero ? 'none' : '';
+}
+
+function addRuleCondition(cond) {
+  var container = document.getElementById('ruleConditions');
+  var idx = container.children.length;
+  var div = document.createElement('div');
+  div.innerHTML = conditionRowHTML(idx, cond || null);
+  container.appendChild(div.firstChild);
+}
+
+function removeCondRow(btn) {
+  btn.closest('.cond-row').remove();
+  // Re-index — first row loses delete button
+  var rows = document.getElementById('ruleConditions').querySelectorAll('.cond-row');
+  rows.forEach(function(row, i) {
+    var existing = row.querySelector('button');
+    if (i === 0 && existing) { existing.style.display = 'none'; }
+    if (i > 0 && existing)   { existing.style.display = ''; }
+  });
+}
+
+function getConditionsFromForm() {
+  var rows = document.getElementById('ruleConditions').querySelectorAll('.cond-row');
+  var conds = [];
+  rows.forEach(function(row) {
+    conds.push({
+      ifActivity: row.querySelector('.cond-activity').value,
+      operator:   row.querySelector('.cond-op').value,
+      count:      parseInt(row.querySelector('.cond-count').value, 10) || 0,
+      months:     parseInt(row.querySelector('.cond-months').value, 10) || 1
+    });
+  });
+  return conds;
+}
+
+function getLogicOp() {
+  var radios = document.querySelectorAll('[name="ruleLogicOp"]');
+  for (var i = 0; i < radios.length; i++) { if (radios[i].checked) return radios[i].value; }
+  return 'AND';
+}
+
+function setLogicOp(op) {
+  var radios = document.querySelectorAll('[name="ruleLogicOp"]');
+  radios.forEach(function(r){ r.checked = r.value === op; });
+}
+
+// ── Render saved rules list ───────────────────────────────────
 function renderRules() {
   var wrap = document.getElementById('rulesList');
   if (!plannerRules.length) {
     wrap.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0;">No rules yet. Add one above.</div>';
     return;
   }
-  var OPS = { '>=': '≥ at least', '<=': '≤ at most', '=': '= exactly', '=0': '= 0 (never done)' };
   wrap.innerHTML = plannerRules.map(function(r, i) {
-    var opLabel = OPS[r.operator] || r.operator;
-    var countTxt = r.operator === '=0' ? '' : r.count + ' time' + (r.count > 1 ? 's' : '');
-    return '<div style="background:#fff;border:1.5px solid ' + (r.active ? '#c5cae9' : '#e0e0e0') + ';border-radius:10px;padding:12px 14px;opacity:' + (r.active ? '1' : '0.5') + ';">'
-      + '<div style="font-size:12px;color:#333;line-height:1.8;margin-bottom:8px;">'
-      + '<b>IF</b> <span style="background:#e3f2fd;color:#0d47a1;padding:2px 8px;border-radius:6px;">' + r.ifActivity + '</span> '
-      + opLabel + ' ' + countTxt + ' in past <span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:6px;">' + r.months + ' month' + (r.months > 1 ? 's' : '') + '</span>'
-      + ' → <b>PLAN</b> <span style="background:#e8f5e9;color:#1b5e20;padding:2px 8px;border-radius:6px;">' + r.thenActivity + '</span>'
+    var condHtml = r.conditions.map(function(c, ci) {
+      var opLbl = OPS_MAP[c.operator] || c.operator;
+      var cntTxt = c.operator === '=0' ? '' : ' ' + c.count + ' time' + (c.count > 1 ? 's' : '') + ' in';
+      var joiner = ci < r.conditions.length - 1
+        ? '<span style="background:' + (r.logicOp==='AND'?'#e8eaf6':'#fff3e0') + ';color:' + (r.logicOp==='AND'?'#283593':'#e65100') + ';font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;margin:0 2px;">' + r.logicOp + '</span>'
+        : '';
+      return '<span style="background:#e3f2fd;color:#0d47a1;padding:2px 8px;border-radius:6px;font-size:11px;">'
+        + c.ifActivity + ' ' + opLbl + cntTxt + ' ' + c.months + 'm'
+        + '</span>' + joiner;
+    }).join(' ');
+
+    return '<div style="background:#fff;border:1.5px solid ' + (r.active?'#c5cae9':'#e0e0e0') + ';border-radius:10px;padding:12px 14px;opacity:' + (r.active?'1':'0.55') + ';">'
+      + '<div style="font-size:12px;color:#333;line-height:2.0;margin-bottom:8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">'
+      + '<b style="color:#555;">IF</b> ' + condHtml
+      + ' <span style="color:#555;font-weight:700;">→ PLAN</span> '
+      + '<span style="background:#e8f5e9;color:#1b5e20;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">' + r.thenActivity + '</span>'
       + '</div>'
-      + '<div style="display:flex;gap:6px;">'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
       + '<button onclick="editRule(' + i + ')" style="background:#e3f2fd;color:#1565c0;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">✏️ Edit</button>'
-      + '<button onclick="toggleRule(' + i + ')" style="background:' + (r.active ? '#fff3e0' : '#e8f5e9') + ';color:' + (r.active ? '#e65100' : '#2e7d32') + ';border:1.5px solid ' + (r.active ? '#ffb74d' : '#81c784') + ';border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">' + (r.active ? '⏸ Disable' : '▶ Enable') + '</button>'
+      + '<button onclick="toggleRule(' + i + ')" style="background:' + (r.active?'#fff3e0':'#e8f5e9') + ';color:' + (r.active?'#e65100':'#2e7d32') + ';border:1.5px solid ' + (r.active?'#ffb74d':'#81c784') + ';border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">' + (r.active?'⏸ Disable':'▶ Enable') + '</button>'
       + '<button onclick="deleteRule(' + i + ')" style="background:#fce4ec;color:#c62828;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">🗑 Delete</button>'
       + '</div></div>';
   }).join('');
 }
 
 function saveRule() {
-  var id          = document.getElementById('ruleEditId').value;
-  var ifActivity  = document.getElementById('ruleIfActivity').value;
-  var operator    = document.getElementById('ruleOperator').value;
-  var count       = parseInt(document.getElementById('ruleCount').value, 10);
-  var months      = parseInt(document.getElementById('ruleMonths').value, 10);
-  var thenActivity= document.getElementById('ruleThenActivity').value;
+  var conditions   = getConditionsFromForm();
+  var logicOp      = getLogicOp();
+  var thenActivity = document.getElementById('ruleThenActivity').value;
+  var id           = document.getElementById('ruleEditId').value;
+  if (!conditions.length) { showToast('कम से कम 1 condition जरूरी है', 2000, '#c62828'); return; }
 
   showToast('⏳ Saving rule...', 1500, '#1565c0');
-  gasCall('saveRule', { id: id, ifActivity: ifActivity, operator: operator, count: count, months: months, thenActivity: thenActivity, active: true },
-    function(resp) {
+  gasCall('saveRule', { id: id, conditions: JSON.stringify(conditions), logicOp: logicOp, thenActivity: thenActivity, active: true },
+    function() {
       showToast('✅ Rule saved!', 2000, '#2e7d32');
       cancelRuleEdit();
       loadRules();
@@ -6193,37 +6250,39 @@ function saveRule() {
 
 function editRule(idx) {
   var r = plannerRules[idx];
-  document.getElementById('ruleEditId').value          = r.id;
-  document.getElementById('ruleIfActivity').value      = r.ifActivity;
-  document.getElementById('ruleOperator').value        = r.operator;
-  document.getElementById('ruleCount').value           = r.count;
-  document.getElementById('ruleMonths').value          = r.months;
-  document.getElementById('ruleThenActivity').value    = r.thenActivity;
+  document.getElementById('ruleEditId').value = r.id;
   document.getElementById('ruleFormTitle').textContent = '✏️ Edit Rule';
   document.getElementById('ruleCancelBtn').style.display = 'inline-block';
-  document.getElementById('ruleIfActivity').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  document.getElementById('ruleThenActivity').value = r.thenActivity;
+  setLogicOp(r.logicOp || 'AND');
+  // Rebuild conditions
+  var container = document.getElementById('ruleConditions');
+  container.innerHTML = '';
+  (r.conditions || []).forEach(function(c, i) { addRuleCondition(c); });
+  if (!r.conditions.length) addRuleCondition();
+  document.getElementById('ruleConditions').scrollIntoView({ behavior:'smooth', block:'center' });
 }
 
 function cancelRuleEdit() {
-  document.getElementById('ruleEditId').value          = '';
+  document.getElementById('ruleEditId').value = '';
   document.getElementById('ruleFormTitle').textContent = '+ New Rule';
   document.getElementById('ruleCancelBtn').style.display = 'none';
-  document.getElementById('ruleIfActivity').value  = 'Field';
-  document.getElementById('ruleOperator').value    = '>=';
-  document.getElementById('ruleCount').value       = '1';
-  document.getElementById('ruleMonths').value      = '3';
-  document.getElementById('ruleThenActivity').value= 'Demo';
+  document.getElementById('ruleThenActivity').value = 'Demo';
+  setLogicOp('AND');
+  var container = document.getElementById('ruleConditions');
+  container.innerHTML = '';
+  addRuleCondition(); // one blank condition
 }
 
 function toggleRule(idx) {
   var r = plannerRules[idx];
-  gasCall('saveRule', { id: r.id, ifActivity: r.ifActivity, operator: r.operator, count: r.count, months: r.months, thenActivity: r.thenActivity, active: !r.active },
+  gasCall('saveRule', { id: r.id, conditions: JSON.stringify(r.conditions), logicOp: r.logicOp, thenActivity: r.thenActivity, active: !r.active },
     function() { loadRules(); });
 }
 
 function deleteRule(idx) {
   var r = plannerRules[idx];
-  if (!confirm('Delete rule: IF ' + r.ifActivity + ' → PLAN ' + r.thenActivity + '?')) return;
+  if (!confirm('Delete this rule → PLAN ' + r.thenActivity + '?')) return;
   gasCall('deleteRule', { id: r.id }, function() { loadRules(); });
 }
 
