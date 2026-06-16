@@ -87,9 +87,167 @@
     document.body.appendChild(banner);
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // NOTIFICATIONS — scheduled field-entry reminders
+  // ══════════════════════════════════════════════════════════════
+
+  var NOTIF_KEY       = 'rkt_notif_enabled';
+  var NOTIF_NAME_KEY  = 'rkt_notif_name';
+  var NOTIF_DISMISS   = 'rkt_notif_dismissed';
+  var LAST_ENTRY_KEY  = 'rkt_last_entry_date';
+  var notifTimers     = [];
+
+  // Populate salesman picker from the same list used by the form
+  function populateNotifPicker() {
+    var sel = document.getElementById('notifSalesmanPick');
+    if (!sel) return;
+    var formSel = document.getElementById('salesman');
+    if (!formSel) return;
+    Array.from(formSel.options).forEach(function(o) {
+      if (o.value) {
+        var opt = document.createElement('option');
+        opt.value = o.value; opt.textContent = o.text;
+        sel.appendChild(opt);
+      }
+    });
+    var saved = localStorage.getItem(NOTIF_NAME_KEY);
+    if (saved) sel.value = saved;
+  }
+
+  function initNotifUI() {
+    populateNotifPicker();
+    var enabled   = localStorage.getItem(NOTIF_KEY) === '1';
+    var dismissed = localStorage.getItem(NOTIF_DISMISS) === '1';
+    var name      = localStorage.getItem(NOTIF_NAME_KEY) || '';
+
+    var banner = document.getElementById('notifBanner');
+    var strip  = document.getElementById('notifActiveStrip');
+    var nameEl = document.getElementById('notifActiveName');
+
+    if (enabled && name) {
+      if (banner) banner.style.display = 'none';
+      if (strip)  { strip.style.display = 'flex'; }
+      if (nameEl) nameEl.textContent = name;
+      scheduleReminders(name);
+    } else if (!dismissed && 'Notification' in window) {
+      if (banner) banner.style.display = 'block';
+      if (strip)  strip.style.display = 'none';
+    }
+  }
+
+  function enableNotifications() {
+    var sel  = document.getElementById('notifSalesmanPick');
+    var name = sel ? sel.value.trim() : '';
+    if (!name) { alert('पहले अपना नाम चुनें।'); return; }
+
+    if (!('Notification' in window)) {
+      alert('यह ब्राउज़र नोटिफिकेशन को सपोर्ट नहीं करता।');
+      return;
+    }
+    Notification.requestPermission().then(function(perm) {
+      if (perm === 'granted') {
+        localStorage.setItem(NOTIF_KEY, '1');
+        localStorage.setItem(NOTIF_NAME_KEY, name);
+        localStorage.removeItem(NOTIF_DISMISS);
+
+        document.getElementById('notifBanner').style.display = 'none';
+        var strip  = document.getElementById('notifActiveStrip');
+        var nameEl = document.getElementById('notifActiveName');
+        if (strip)  strip.style.display = 'flex';
+        if (nameEl) nameEl.textContent = name;
+
+        scheduleReminders(name);
+        // Immediate confirmation
+        sendNotification('✅ रिमाइंडर चालू हो गया!',
+          name + ' भाई, अब आपको रोज़ याद दिलाया जाएगा।', 'rkt-welcome');
+      } else {
+        alert('नोटिफिकेशन की परमिशन नहीं मिली। Phone Settings में Allow करें।');
+      }
+    });
+  }
+
+  function disableNotifications() {
+    localStorage.removeItem(NOTIF_KEY);
+    clearNotifTimers();
+    document.getElementById('notifActiveStrip').style.display = 'none';
+    // Show banner again so they can re-enable
+    localStorage.removeItem(NOTIF_DISMISS);
+    document.getElementById('notifBanner').style.display = 'block';
+  }
+
+  function dismissNotifBanner() {
+    localStorage.setItem(NOTIF_DISMISS, '1');
+    document.getElementById('notifBanner').style.display = 'none';
+  }
+
+  function sendNotification(title, body, tag) {
+    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+      // Fallback: direct Notification API
+      if (Notification.permission === 'granted') {
+        new Notification(title, { body: body, icon: '/rkt-crm/icons/icon-192.png', tag: tag });
+      }
+      return;
+    }
+    navigator.serviceWorker.controller.postMessage({
+      type: 'SHOW_NOTIFICATION', title: title, body: body, tag: tag
+    });
+  }
+
+  function clearNotifTimers() {
+    notifTimers.forEach(function(t) { clearTimeout(t); });
+    notifTimers = [];
+  }
+
+  function msUntil(h, m) {
+    var now = new Date();
+    var target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+    if (target <= now) target.setDate(target.getDate() + 1); // next day if passed
+    return target - now;
+  }
+
+  var REMINDERS = [
+    { h: 9,  m: 0,  msg: function(n){ return { title:'🌅 सुबह की याद — ' + n + ' भाई!', body:'आज का पहला काम रिकॉर्ड करें — फील्ड में निकलने से पहले एंट्री करें।' }; } },
+    { h: 13, m: 0,  msg: function(n){ return { title:'☀️ दोपहर चेक-इन — ' + n + ' भाई!', body:'दोपहर हो गई — अब तक के दौरे की एंट्री कर दें।' }; } },
+    { h: 17, m: 30, msg: function(n){ return { title:'🌆 शाम की रिपोर्ट — ' + n + ' भाई!', body:'दिन लगभग खत्म — आज की सभी एंट्री पूरी करें।' }; } }
+  ];
+
+  function scheduleReminders(name) {
+    clearNotifTimers();
+    REMINDERS.forEach(function(r) {
+      var delay = msUntil(r.h, r.m);
+      var t = setTimeout(function fire() {
+        // Only remind if no entry today
+        var lastEntry = localStorage.getItem(LAST_ENTRY_KEY);
+        var today     = new Date().toDateString();
+        var data = r.msg(name);
+        if (lastEntry !== today) {
+          sendNotification(data.title, data.body, 'rkt-reminder-' + r.h);
+        }
+        // Schedule next day
+        notifTimers.push(setTimeout(fire, 24 * 60 * 60 * 1000));
+      }, delay);
+      notifTimers.push(t);
+    });
+  }
+
+  // Track last entry date so reminders are suppressed after the team submits
+  function markEntryToday() {
+    localStorage.setItem(LAST_ENTRY_KEY, new Date().toDateString());
+  }
+
+  // Handle SW → page message (notification tap → open Daily tab)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'OPEN_DAILY') {
+        showTab('daily');
+        window.scrollTo(0, 0);
+      }
+    });
+  }
+
   // ── gasCall() — replaces all google.script.run calls ──────
   function gasCall(action, params, onSuccess, onFailure) {
-    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride','saveDelivery'].indexOf(action) !== -1;
+    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride','saveDelivery','saveVillage','saveRule','deleteRule','generatePlan','updatePlanStatus','saveEmployee','deleteEmployee','sendReminders'].indexOf(action) !== -1;
     var promise;
     if (isWrite) {
       // POST for write operations (image uploads etc.)
@@ -1139,6 +1297,12 @@
     <button id="tab-delivery" class="tab-btn"          onclick="showTab('delivery')">
       <span class="tab-icon">🚚</span>Delivery
     </button>
+    <button id="tab-planner" class="tab-btn"           onclick="showTab('planner')">
+      <span class="tab-icon">📅</span>Planner
+    </button>
+    <button id="tab-employees" class="tab-btn"         onclick="showTab('employees')">
+      <span class="tab-icon">👥</span>Team
+    </button>
   </div>
 
   <!-- ── SCROLLABLE AREA ─────────────────────────────────── -->
@@ -1150,6 +1314,25 @@
     <div id="section-daily" class="section active">
 
       <div class="quote-box" id="quoteBox"></div>
+
+      <!-- NOTIFICATION PERMISSION BANNER -->
+      <div id="notifBanner" style="display:none;background:linear-gradient(135deg,#f3e5f5,#e1bee7);border-left:4px solid #7b1fa2;border-radius:10px;padding:14px;margin:8px 12px;">
+        <div style="font-weight:700;font-size:15px;color:#4a148c;margin-bottom:6px;">🔔 रिमाइंडर चालू करें</div>
+        <div style="font-size:13px;color:#4a148c;margin-bottom:10px;">दिन में 3 बार याद दिलाएगा — सुबह 9 बजे, दोपहर 1 बजे, शाम 5:30 बजे — जब फील्ड एंट्री बाकी हो।</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <select id="notifSalesmanPick" style="flex:1;min-width:140px;padding:8px 10px;border-radius:8px;border:1px solid #ce93d8;font-size:14px;background:#fff;color:#4a148c;">
+            <option value="">-- अपना नाम चुनें --</option>
+          </select>
+          <button onclick="enableNotifications()" style="background:#7b1fa2;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:14px;font-weight:700;cursor:pointer;">✅ चालू करें</button>
+          <button onclick="dismissNotifBanner()" style="background:#fff;color:#7b1fa2;border:1px solid #ce93d8;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;">बाद में</button>
+        </div>
+      </div>
+
+      <!-- NOTIFICATION ACTIVE STRIP -->
+      <div id="notifActiveStrip" style="display:none;background:#f3e5f5;border-radius:8px;padding:8px 12px;margin:6px 12px;font-size:13px;color:#6a1b9a;display:flex;align-items:center;justify-content:space-between;">
+        <span>🔔 रिमाइंडर चालू है — <b id="notifActiveName"></b></span>
+        <button onclick="disableNotifications()" style="background:none;border:none;color:#9c4dcc;font-size:12px;cursor:pointer;text-decoration:underline;">बंद करें</button>
+      </div>
 
       <!-- GPS FIELD INSTRUCTION BANNER -->
       <div id="gpsInstructionBanner" style="background:linear-gradient(135deg,#e3f2fd,#bbdefb);border-left:4px solid #1565c0;border-radius:10px;padding:14px 14px;margin:8px 12px;font-size:14px;color:#0d47a1;">
@@ -2211,6 +2394,270 @@
     </div><!-- /section-delivery -->
 
     <!-- ════════════════════════════════════════════════════ -->
+    <!--  ACTIVITY PLANNER                                    -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-planner" class="section">
+
+      <!-- Lock Screen -->
+      <div id="plannerLockScreen" style="padding:40px 20px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:12px;">📅</div>
+        <div style="font-size:18px;font-weight:700;color:#1565c0;margin-bottom:6px;">Activity Planner</div>
+        <div style="font-size:13px;color:#777;margin-bottom:20px;">Admin access required</div>
+        <input type="password" id="plannerPwd" placeholder="Password"
+          style="padding:10px 16px;border:1.5px solid #c5cae9;border-radius:8px;font-size:15px;width:200px;text-align:center;display:block;margin:0 auto 12px;"
+          onkeydown="if(event.key==='Enter')unlockPlanner()">
+        <button onclick="unlockPlanner()"
+          style="background:#1565c0;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:15px;font-weight:700;cursor:pointer;">
+          Unlock
+        </button>
+      </div>
+
+      <!-- Planner Content -->
+      <div id="plannerContent" style="display:none;">
+
+        <!-- Sub-tab bar -->
+        <div style="display:flex;border-bottom:2px solid #e8eaf6;margin-bottom:0;overflow-x:auto;">
+          <button id="ptab-plan"    onclick="pShowTab('plan')"    style="flex:1;padding:11px 6px;font-size:12px;font-weight:700;border:none;background:none;border-bottom:3px solid #1565c0;color:#1565c0;cursor:pointer;">📋 Monthly Plan</button>
+          <button id="ptab-rules"   onclick="pShowTab('rules')"   style="flex:1;padding:11px 6px;font-size:12px;font-weight:600;border:none;background:none;border-bottom:3px solid transparent;color:#888;cursor:pointer;">⚙️ Rules</button>
+          <button id="ptab-villages" onclick="pShowTab('villages')" style="flex:1;padding:11px 6px;font-size:12px;font-weight:600;border:none;background:none;border-bottom:3px solid transparent;color:#888;cursor:pointer;">🗺️ Villages</button>
+        </div>
+
+        <!-- ── MONTHLY PLAN sub-tab ── -->
+        <div id="psection-plan" style="padding:12px;">
+          <div class="card">
+            <div class="card-title">📋 Monthly Activity Plan</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+              <select id="planMonth" style="flex:1;min-width:100px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
+                <option value="1">January</option><option value="2">February</option>
+                <option value="3">March</option><option value="4">April</option>
+                <option value="5">May</option><option value="6">June</option>
+                <option value="7">July</option><option value="8">August</option>
+                <option value="9">September</option><option value="10">October</option>
+                <option value="11">November</option><option value="12">December</option>
+              </select>
+              <select id="planYear" style="flex:1;min-width:90px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;"></select>
+              <select id="planArea" style="flex:1;min-width:90px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
+                <option value="All">All Areas</option>
+                <option value="Phagi">Phagi</option>
+                <option value="Dudu">Dudu</option>
+              </select>
+              <select id="planSalesman" style="flex:1;min-width:110px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
+                <option value="All">All Salesmen</option>
+                <option>Abhishek</option><option>Shivdayal</option>
+                <option>Roduram</option><option>Hemraj</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+              <button onclick="doGeneratePlan()" style="flex:1;background:#7b1fa2;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">⚡ Generate Plan</button>
+              <button onclick="doLoadPlan()"     style="flex:1;background:#1565c0;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Load Plan</button>
+            </div>
+            <div id="planStatus" style="font-size:12px;color:#888;margin-bottom:8px;"></div>
+            <div id="planTableWrap" style="overflow-x:auto;"></div>
+          </div>
+        </div>
+
+        <!-- ── RULES sub-tab ── -->
+        <div id="psection-rules" style="display:none;padding:12px;">
+          <div class="card">
+            <div class="card-title">⚙️ Business Rules</div>
+            <div style="font-size:12px;color:#555;margin-bottom:12px;line-height:1.6;">
+              Rules define when to plan an activity for a village based on past CRM data.<br>
+              <b>IF</b> [past activity] [operator] [N] times in past [M] months → <b>PLAN</b> [activity] this month.
+            </div>
+
+            <!-- Rule form -->
+            <div style="background:#f8f9ff;border:1.5px solid #c5cae9;border-radius:10px;padding:14px;margin-bottom:14px;">
+              <div style="font-weight:700;font-size:13px;color:#1565c0;margin-bottom:10px;" id="ruleFormTitle">+ New Rule</div>
+              <input type="hidden" id="ruleEditId">
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;align-items:center;">
+                <span style="font-size:12px;font-weight:700;color:#555;white-space:nowrap;">IF past</span>
+                <select id="ruleIfActivity" style="flex:1;min-width:120px;padding:7px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;">
+                  <option>Field</option><option>Demo</option><option>Display+Canopy</option>
+                  <option>Service Camp</option><option>Showroom</option>
+                  <option>Tractor Service-At Field</option><option>Tractor Service-At Showroom</option>
+                </select>
+                <select id="ruleOperator" style="flex:1;min-width:110px;padding:7px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;">
+                  <option value=">=">≥ at least</option>
+                  <option value="<=">≤ at most</option>
+                  <option value="=">= exactly</option>
+                  <option value="=0">= 0 (never done)</option>
+                </select>
+                <select id="ruleCount" style="width:70px;padding:7px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;">
+                  <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+                </select>
+                <span style="font-size:12px;font-weight:700;color:#555;white-space:nowrap;">times in past</span>
+                <select id="ruleMonths" style="width:90px;padding:7px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;">
+                  <option value="1">1 month</option><option value="2">2 months</option>
+                  <option value="3">3 months</option><option value="6">6 months</option>
+                  <option value="12">12 months</option>
+                </select>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+                <span style="font-size:12px;font-weight:700;color:#555;white-space:nowrap;">→ PLAN</span>
+                <select id="ruleThenActivity" style="flex:1;min-width:120px;padding:7px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;">
+                  <option>Demo</option><option>Field</option><option>Display+Canopy</option>
+                  <option>Service Camp</option><option>Tractor Service-At Field</option>
+                </select>
+                <span style="font-size:12px;font-weight:700;color:#555;white-space:nowrap;">for this village</span>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button onclick="saveRule()" style="background:#2e7d32;color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">💾 Save Rule</button>
+                <button onclick="cancelRuleEdit()" id="ruleCancelBtn" style="display:none;background:#fff;color:#555;border:1.5px solid #ccc;border-radius:7px;padding:8px 14px;font-size:12px;cursor:pointer;">Cancel</button>
+              </div>
+            </div>
+
+            <div id="rulesList" style="display:flex;flex-direction:column;gap:8px;"></div>
+          </div>
+        </div>
+
+        <!-- ── VILLAGES sub-tab ── -->
+        <div id="psection-villages" style="display:none;padding:12px;">
+          <div class="card">
+            <div class="card-title">🗺️ Village Setup</div>
+
+            <!-- Quick assign form -->
+            <div style="background:#f8f9ff;border:1.5px solid #c5cae9;border-radius:10px;padding:14px;margin-bottom:14px;">
+              <div style="font-weight:700;font-size:13px;color:#1565c0;margin-bottom:10px;">Assign Salesman to Village</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+                <input type="text" id="vAssignVillage" placeholder="Village name" list="villageDatalist"
+                  style="flex:2;min-width:140px;padding:8px;border:1.5px solid #c5cae9;border-radius:7px;font-size:13px;">
+                <datalist id="villageDatalist"></datalist>
+                <select id="vAssignArea" style="flex:1;min-width:90px;padding:8px;border:1.5px solid #c5cae9;border-radius:7px;font-size:13px;">
+                  <option value="">Area</option>
+                  <option value="Phagi">Phagi</option>
+                  <option value="Dudu">Dudu</option>
+                </select>
+                <select id="vAssignSalesman" style="flex:1;min-width:110px;padding:8px;border:1.5px solid #c5cae9;border-radius:7px;font-size:13px;">
+                  <option value="">Salesman</option>
+                  <option>Abhishek</option><option>Shivdayal</option>
+                  <option>Roduram</option><option>Hemraj</option>
+                </select>
+              </div>
+              <button onclick="saveVillageAssignment()" style="background:#1565c0;color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">💾 Save</button>
+            </div>
+
+            <!-- Filter -->
+            <div style="display:flex;gap:8px;margin-bottom:10px;">
+              <select id="vFilterArea" onchange="renderVillageList()" style="flex:1;padding:7px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;">
+                <option value="All">All Areas</option>
+                <option value="Phagi">Phagi</option>
+                <option value="Dudu">Dudu</option>
+              </select>
+              <input type="text" id="vFilterText" oninput="renderVillageList()" placeholder="Search village…"
+                style="flex:2;padding:7px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;">
+            </div>
+
+            <div id="villageListWrap" style="overflow-x:auto;"></div>
+          </div>
+        </div>
+
+      </div><!-- /plannerContent -->
+    </div><!-- /section-planner -->
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!--  EMPLOYEE MASTER                                     -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-employees" class="section">
+
+      <!-- Lock Screen -->
+      <div id="empLockScreen" style="padding:40px 20px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:12px;">👥</div>
+        <div style="font-size:18px;font-weight:700;color:#1565c0;margin-bottom:6px;">Team Master</div>
+        <div style="font-size:13px;color:#777;margin-bottom:20px;">Admin access required</div>
+        <input type="password" id="empPwd" placeholder="Password"
+          style="padding:10px 16px;border:1.5px solid #c5cae9;border-radius:8px;font-size:15px;width:200px;text-align:center;display:block;margin:0 auto 12px;"
+          onkeydown="if(event.key==='Enter')unlockEmployees()">
+        <button onclick="unlockEmployees()"
+          style="background:#1565c0;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:15px;font-weight:700;cursor:pointer;">Unlock</button>
+      </div>
+
+      <!-- Content -->
+      <div id="empContent" style="display:none;padding:12px;">
+
+        <!-- WhatsApp Reminder Card -->
+        <div class="card" style="background:linear-gradient(135deg,#e8f5e9,#f1f8e9);border:1.5px solid #a5d6a7;">
+          <div class="card-title" style="color:#1b5e20;">📲 WhatsApp Reminder</div>
+          <div style="font-size:12px;color:#2e7d32;margin-bottom:10px;line-height:1.7;">
+            सभी active team members को एक साथ WhatsApp message भेजें।<br>
+            <b>Setup:</b> हर team member को एक बार <b>+34 644 82 76 11</b> पर WhatsApp करना होगा:<br>
+            <span style="background:#fff;padding:3px 8px;border-radius:6px;font-family:monospace;font-size:12px;">I allow callmebot to send me messages</span><br>
+            उन्हें एक <b>API key</b> मिलेगी — वो नीचे Employee record में डालें।
+          </div>
+          <textarea id="reminderMsg" rows="3"
+            style="width:100%;padding:10px;border:1.5px solid #a5d6a7;border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:10px;resize:vertical;"
+            placeholder="Message (blank = default morning reminder)"></textarea>
+          <button onclick="sendReminderToAll()"
+            style="width:100%;background:#2e7d32;color:#fff;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">
+            📢 Send Now to All
+          </button>
+          <div id="reminderStatus" style="margin-top:8px;font-size:13px;text-align:center;"></div>
+        </div>
+
+        <!-- Add / Edit Employee -->
+        <div class="card">
+          <div class="card-title" id="empFormTitle">➕ Add Team Member</div>
+          <input type="hidden" id="empRowNum">
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div style="flex:1;min-width:130px;">
+                <div style="font-size:11px;color:#777;font-weight:600;margin-bottom:3px;">Name *</div>
+                <input type="text" id="empName" placeholder="Full name"
+                  style="width:100%;padding:9px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;box-sizing:border-box;">
+              </div>
+              <div style="flex:1;min-width:130px;">
+                <div style="font-size:11px;color:#777;font-weight:600;margin-bottom:3px;">WhatsApp *</div>
+                <input type="tel" id="empWhatsapp" placeholder="9876543210"
+                  style="width:100%;padding:9px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;box-sizing:border-box;">
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div style="flex:1;min-width:120px;">
+                <div style="font-size:11px;color:#777;font-weight:600;margin-bottom:3px;">Role</div>
+                <select id="empRole" style="width:100%;padding:9px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
+                  <option value="Sales">Sales</option>
+                  <option value="Mechanic">Mechanic</option>
+                  <option value="Manager">Manager</option>
+                </select>
+              </div>
+              <div style="flex:1;min-width:120px;">
+                <div style="font-size:11px;color:#777;font-weight:600;margin-bottom:3px;">Location</div>
+                <select id="empLocation" style="width:100%;padding:9px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
+                  <option value="Phagi">Phagi</option>
+                  <option value="Dudu">Dudu</option>
+                  <option value="Mauzmabad">Mauzmabad</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:#777;font-weight:600;margin-bottom:3px;">CallMeBot API Key</div>
+              <input type="text" id="empCallmebotKey" placeholder="Key received from CallMeBot activation"
+                style="width:100%;padding:9px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;box-sizing:border-box;">
+              <div style="font-size:11px;color:#888;margin-top:3px;">Leave blank if not activated yet. Employee still saved.</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+                <input type="checkbox" id="empActive" checked style="width:16px;height:16px;cursor:pointer;">
+                <span>Include in WhatsApp reminders</span>
+              </label>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <button onclick="saveEmployee()"
+              style="flex:1;background:#1565c0;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">💾 Save</button>
+            <button onclick="resetEmpForm()" id="empCancelBtn" style="display:none;background:#fff;color:#555;border:1.5px solid #ccc;border-radius:8px;padding:10px 16px;font-size:13px;cursor:pointer;">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Employee List -->
+        <div class="card">
+          <div class="card-title">👥 Team Members</div>
+          <div id="empListWrap"></div>
+        </div>
+
+      </div><!-- /empContent -->
+    </div><!-- /section-employees -->
+
+    <!-- ════════════════════════════════════════════════════ -->
     <!--  SERVICE REPORT                                      -->
     <!-- ════════════════════════════════════════════════════ -->
 
@@ -2633,13 +3080,16 @@ window.onload = function() {
   if (window.matchMedia("(display-mode: standalone)").matches) {
     showToast("👋 Welcome to RKT CRM!", 2500, "#1565c0");
   }
+
+  // Notification reminders setup
+  initNotifUI();
 };
 
 // ════════════════════════════════════════════════════════════
 // TABS
 // ════════════════════════════════════════════════════════════
 function showTab(tab) {
-  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap","report","target","delivery"].forEach(function(t) {
+  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap","report","target","delivery","planner","employees"].forEach(function(t) {
     document.getElementById("section-" + t).classList.toggle("active", t === tab);
     document.getElementById("tab-" + t).classList.toggle("active", t === tab);
   });
@@ -2694,6 +3144,28 @@ function showTab(tab) {
       document.getElementById("deliveryLockScreen").style.display = "block";
       document.getElementById("deliveryContent").style.display    = "none";
       setTimeout(function(){ document.getElementById("deliveryPasswordInput").focus(); }, 300);
+    }
+  }
+  if (tab === "employees") {
+    if (empUnlocked) {
+      document.getElementById("empLockScreen").style.display = "none";
+      document.getElementById("empContent").style.display    = "block";
+      loadEmployees();
+    } else {
+      document.getElementById("empLockScreen").style.display = "block";
+      document.getElementById("empContent").style.display    = "none";
+      setTimeout(function(){ document.getElementById("empPwd").focus(); }, 300);
+    }
+  }
+  if (tab === "planner") {
+    if (plannerUnlocked) {
+      document.getElementById("plannerLockScreen").style.display = "none";
+      document.getElementById("plannerContent").style.display    = "block";
+      plannerOnOpen();
+    } else {
+      document.getElementById("plannerLockScreen").style.display = "block";
+      document.getElementById("plannerContent").style.display    = "none";
+      setTimeout(function(){ document.getElementById("plannerPwd").focus(); }, 300);
     }
   }
   if (tab === "service") {
@@ -3028,6 +3500,7 @@ function submitForm() {
       btn.disabled = false;
       btn.textContent = existingCustomer ? "✏️ Update Customer" : "💾 Save Customer";
       if (gpsStatus) { gpsStatus.textContent = "📡 लोकेशन: तैयार है"; gpsStatus.style.color = "#1565c0"; }
+      markEntryToday(); // suppress today's reminders — entry was made
       // Show motivation toast, then after 5s show save-confirmation dialog
       showMotivationToast(
         data.salesman || data.mechanicName || "",
@@ -4150,6 +4623,8 @@ var billUnlocked    = false;
 var rptUnlocked     = false;
 var targetUnlocked   = false;
 var deliveryUnlocked = false;
+var plannerUnlocked  = false;
+var empUnlocked      = false;
 var billRecords     = [];
 var billYearsInited = false;
 
@@ -5461,6 +5936,552 @@ function showSaveConfirm(respMsg, callback) {
     modal.parentNode.removeChild(modal);
     callback(false);
   };
+}
+
+// ════════════════════════════════════════════════════════════
+// ACTIVITY PLANNER
+// ════════════════════════════════════════════════════════════
+
+// ── Village master (client-side cache) ──────────────────────
+var plannerVillages = [];
+
+// Deduplicated village seed from the uploaded village master xlsx.
+// Key = VILLAGE_UPPER, value = { village, area }
+var VILLAGE_SEED = (function() {
+  var raw = [
+    // Dudu
+    ["AKHTARI","Dudu"],["BAGHET","Dudu"],["BINJOLAW","Dudu"],["CHAPYA","Dudu"],
+    ["DAYALPURA","Dudu"],["DOGRA","Dudu"],["DORIYA","Dudu"],["GAHLOTA","Dudu"],
+    ["GANESHPURA","Dudu"],["GANGATI KHURD","Dudu"],["GANGATIKALA","Dudu"],
+    ["GOPALPURA","Dudu"],["GUDARAIPURA","Dudu"],["HARSULI","Dudu"],
+    ["HINGONIYA","Dudu"],["JHAG","Dudu"],["KAKRALIYA","Dudu"],["KALYANPURA","Dudu"],
+    ["KERIYA KHURD","Dudu"],["KHEDI CHARNAN","Dudu"],["KHUDIYALA","Dudu"],
+    ["LORDI","Dudu"],["MAAL KI DHANI","Dudu"],["MANDAWARI","Dudu"],
+    ["MANGALWADA","Dudu"],["MANSINGHPURA","Dudu"],["MEERAPURA","Dudu"],
+    ["MOZMABAD","Dudu"],["NACHANIPURA","Dudu"],["NOLYA","Dudu"],
+    ["NORANGPURA","Dudu"],["PADASOLI","Dudu"],["PALOO KALAN","Dudu"],
+    ["RAMPURABHUTIYA","Dudu"],["RASEELI","Dudu"],["SALI","Dudu"],["SEVA","Dudu"],
+    ["SRIRAMMPURA","Dudu"],["SWAIJAISINGHPURA","Dudu"],["SWAIMANSIGHPURA","Dudu"],
+    ["URSEVA","Dudu"],["GAGARDOO","Dudu"],["GIDANI","Dudu"],["RAHLANA","Dudu"],
+    ["BORAJ","Dudu"],["KACHNARIYA","Dudu"],["BICHOON","Dudu"],["KHURIYALA","Dudu"],
+    ["KISHANPURA","Dudu"],["LAPORIYA","Dudu"],["SAWARDA","Dudu"],["SHAKUN","Dudu"],
+    ["PARASOLI","Dudu"],["HATOOPURA","Dudu"],["LADERA","Dudu"],["DHANDHONLI","Dudu"],
+    ["DHAMANA","Dudu"],["AKHEPURA","Dudu"],["CHHAPARWARA","Dudu"],["UGARIYAWAS","Dudu"],
+    ["MANGALWARA","Dudu"],["HARSAULI","Dudu"],
+    // Phagi
+    ["GOPAL NAGAR","Phagi"],["MADANPURA","Phagi"],["KUDLI","Phagi"],
+    ["GADUDA","Phagi"],["SAKATPURA","Phagi"],["SAWA KA BAAS","Phagi"],
+    ["BHANKROTA","Phagi"],["BISALOO","Phagi"],["LADANA","Phagi"],
+    ["GOPALPURA PHAGI","Phagi"],["CHITTORA","Phagi"],["CHANDMA KALA","Phagi"],
+    ["PACHALA","Phagi"],["CHAKWARA","Phagi"],["SHANKARPURA","Phagi"],
+    ["NENSIYA","Phagi"],["BHARATPURA","Phagi"],["JHODINDA","Phagi"],
+    ["LASADIYA","Phagi"],["AJNOTA","Phagi"],["MADHORAJPURA","Phagi"],
+    ["RAMPURA RANWA","Phagi"],["CHANDMA KHURD","Phagi"],["DIDAWATA","Phagi"],
+    ["PEEPLA","Phagi"],["MOHANPURA","Phagi"],["GOHANDI","Phagi"],
+    ["DALNIYA","Phagi"],["NAREDA","Phagi"],["BHOJPURA","Phagi"],
+    ["KISHANPURA PHAGI","Phagi"],["THALA","Phagi"],["BEECHI","Phagi"],
+    ["SEHDARIYA","Phagi"]
+  ];
+  var map = {};
+  raw.forEach(function(r){ map[r[0]] = { village: r[0], area: r[1] }; });
+  return map;
+})();
+
+// ── Unlock ───────────────────────────────────────────────────
+function unlockPlanner() {
+  var pwd = document.getElementById('plannerPwd').value;
+  if (pwd === '220285') {
+    plannerUnlocked = true;
+    document.getElementById('plannerLockScreen').style.display = 'none';
+    document.getElementById('plannerContent').style.display    = 'block';
+    plannerOnOpen();
+  } else {
+    document.getElementById('plannerPwd').value = '';
+    document.getElementById('plannerPwd').placeholder = '❌ Wrong password';
+    setTimeout(function(){ document.getElementById('plannerPwd').placeholder = 'Password'; }, 1500);
+  }
+}
+
+// ── Called once when planner tab opens ───────────────────────
+var plannerInited = false;
+function plannerOnOpen() {
+  if (plannerInited) return;
+  plannerInited = true;
+
+  // Populate year dropdowns
+  var yr = new Date().getFullYear();
+  ['planYear'].forEach(function(id) {
+    var sel = document.getElementById(id);
+    for (var y = yr + 1; y >= yr - 1; y--) {
+      var o = document.createElement('option');
+      o.value = y; o.text = y;
+      if (y === yr) o.selected = true;
+      sel.appendChild(o);
+    }
+  });
+  document.getElementById('planMonth').value = new Date().getMonth() + 1;
+
+  // Seed datalist with all known villages
+  var dl = document.getElementById('villageDatalist');
+  Object.keys(VILLAGE_SEED).forEach(function(k) {
+    var o = document.createElement('option');
+    o.value = VILLAGE_SEED[k].village;
+    dl.appendChild(o);
+  });
+
+  loadVillages();
+  loadRules();
+}
+
+// ── Sub-tab switching ─────────────────────────────────────────
+function pShowTab(t) {
+  ['plan','rules','villages'].forEach(function(s) {
+    document.getElementById('psection-' + s).style.display = s === t ? 'block' : 'none';
+    var btn = document.getElementById('ptab-' + s);
+    btn.style.borderBottomColor = s === t ? '#1565c0' : 'transparent';
+    btn.style.color = s === t ? '#1565c0' : '#888';
+    btn.style.fontWeight = s === t ? '700' : '600';
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// VILLAGE MANAGEMENT
+// ════════════════════════════════════════════════════════════
+
+function loadVillages() {
+  gasCall('getVillages', {}, function(data) {
+    // Merge server data with seed — server wins for salesman
+    var serverMap = {};
+    (data.villages || []).forEach(function(v) {
+      serverMap[v.village.toUpperCase()] = v;
+    });
+    // Build full list: seed + any server-only entries
+    var merged = [];
+    Object.keys(VILLAGE_SEED).forEach(function(k) {
+      var seed = VILLAGE_SEED[k];
+      var srv  = serverMap[k] || {};
+      merged.push({ village: seed.village, area: seed.area, salesman: srv.salesman || '' });
+    });
+    // Add server villages not in seed
+    Object.keys(serverMap).forEach(function(k) {
+      if (!VILLAGE_SEED[k]) merged.push(serverMap[k]);
+    });
+    merged.sort(function(a,b){ return (a.area+a.village).localeCompare(b.area+b.village); });
+    plannerVillages = merged;
+    renderVillageList();
+  });
+}
+
+function renderVillageList() {
+  var areaF = document.getElementById('vFilterArea').value;
+  var textF = (document.getElementById('vFilterText').value || '').toUpperCase();
+  var list  = plannerVillages.filter(function(v) {
+    if (areaF !== 'All' && v.area !== areaF) return false;
+    if (textF && v.village.toUpperCase().indexOf(textF) < 0) return false;
+    return true;
+  });
+
+  if (!list.length) {
+    document.getElementById('villageListWrap').innerHTML = '<div style="color:#888;font-size:13px;padding:12px 0;">No villages found.</div>';
+    return;
+  }
+
+  var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+    + '<thead><tr style="background:#e8eaf6;">'
+    + '<th style="padding:8px 10px;text-align:left;font-weight:700;color:#283593;">Village</th>'
+    + '<th style="padding:8px 10px;text-align:left;font-weight:700;color:#283593;">Area</th>'
+    + '<th style="padding:8px 10px;text-align:left;font-weight:700;color:#283593;">Salesman</th>'
+    + '<th style="padding:8px 10px;"></th>'
+    + '</tr></thead><tbody>';
+
+  list.forEach(function(v, i) {
+    var odd = i % 2 === 0;
+    html += '<tr style="background:' + (odd ? '#fff' : '#f8f9ff') + ';">'
+      + '<td style="padding:7px 10px;">' + v.village + '</td>'
+      + '<td style="padding:7px 10px;"><span style="background:' + (v.area==='Phagi'?'#e8f5e9':'#e3f2fd') + ';color:' + (v.area==='Phagi'?'#1b5e20':'#0d47a1') + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">' + v.area + '</span></td>'
+      + '<td style="padding:7px 10px;color:' + (v.salesman ? '#333' : '#bbb') + ';">' + (v.salesman || '— unassigned') + '</td>'
+      + '<td style="padding:7px 8px;"><button onclick="prefillVillageAssign(' + JSON.stringify(v.village) + ',' + JSON.stringify(v.area) + ',' + JSON.stringify(v.salesman) + ')" style="background:#e3f2fd;color:#1565c0;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Edit</button></td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('villageListWrap').innerHTML = html;
+}
+
+function prefillVillageAssign(village, area, salesman) {
+  document.getElementById('vAssignVillage').value  = village;
+  document.getElementById('vAssignArea').value     = area;
+  document.getElementById('vAssignSalesman').value = salesman || '';
+  document.getElementById('vAssignVillage').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function saveVillageAssignment() {
+  var village  = document.getElementById('vAssignVillage').value.trim();
+  var area     = document.getElementById('vAssignArea').value;
+  var salesman = document.getElementById('vAssignSalesman').value;
+  if (!village || !area) { showToast('Village और Area जरूरी है', 2000, '#c62828'); return; }
+
+  showToast('⏳ सेव हो रहा है...', 1500, '#1565c0');
+  gasCall('saveVillage', { village: village, area: area, salesman: salesman }, function() {
+    showToast('✅ Village saved!', 2000, '#2e7d32');
+    // Update local cache
+    var key = village.toUpperCase();
+    var found = false;
+    plannerVillages.forEach(function(v) {
+      if (v.village.toUpperCase() === key) { v.salesman = salesman; v.area = area; found = true; }
+    });
+    if (!found) plannerVillages.push({ village: village, area: area, salesman: salesman });
+    plannerVillages.sort(function(a,b){ return (a.area+a.village).localeCompare(b.area+b.village); });
+    renderVillageList();
+    document.getElementById('vAssignVillage').value = '';
+    document.getElementById('vAssignSalesman').value = '';
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// RULES MANAGEMENT
+// ════════════════════════════════════════════════════════════
+
+var plannerRules = [];
+
+function loadRules() {
+  gasCall('getRules', {}, function(data) {
+    plannerRules = data.rules || [];
+    renderRules();
+  });
+}
+
+function renderRules() {
+  var wrap = document.getElementById('rulesList');
+  if (!plannerRules.length) {
+    wrap.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0;">No rules yet. Add one above.</div>';
+    return;
+  }
+  var OPS = { '>=': '≥ at least', '<=': '≤ at most', '=': '= exactly', '=0': '= 0 (never done)' };
+  wrap.innerHTML = plannerRules.map(function(r, i) {
+    var opLabel = OPS[r.operator] || r.operator;
+    var countTxt = r.operator === '=0' ? '' : r.count + ' time' + (r.count > 1 ? 's' : '');
+    return '<div style="background:#fff;border:1.5px solid ' + (r.active ? '#c5cae9' : '#e0e0e0') + ';border-radius:10px;padding:12px 14px;opacity:' + (r.active ? '1' : '0.5') + ';">'
+      + '<div style="font-size:12px;color:#333;line-height:1.8;margin-bottom:8px;">'
+      + '<b>IF</b> <span style="background:#e3f2fd;color:#0d47a1;padding:2px 8px;border-radius:6px;">' + r.ifActivity + '</span> '
+      + opLabel + ' ' + countTxt + ' in past <span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:6px;">' + r.months + ' month' + (r.months > 1 ? 's' : '') + '</span>'
+      + ' → <b>PLAN</b> <span style="background:#e8f5e9;color:#1b5e20;padding:2px 8px;border-radius:6px;">' + r.thenActivity + '</span>'
+      + '</div>'
+      + '<div style="display:flex;gap:6px;">'
+      + '<button onclick="editRule(' + i + ')" style="background:#e3f2fd;color:#1565c0;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">✏️ Edit</button>'
+      + '<button onclick="toggleRule(' + i + ')" style="background:' + (r.active ? '#fff3e0' : '#e8f5e9') + ';color:' + (r.active ? '#e65100' : '#2e7d32') + ';border:1.5px solid ' + (r.active ? '#ffb74d' : '#81c784') + ';border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">' + (r.active ? '⏸ Disable' : '▶ Enable') + '</button>'
+      + '<button onclick="deleteRule(' + i + ')" style="background:#fce4ec;color:#c62828;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">🗑 Delete</button>'
+      + '</div></div>';
+  }).join('');
+}
+
+function saveRule() {
+  var id          = document.getElementById('ruleEditId').value;
+  var ifActivity  = document.getElementById('ruleIfActivity').value;
+  var operator    = document.getElementById('ruleOperator').value;
+  var count       = parseInt(document.getElementById('ruleCount').value, 10);
+  var months      = parseInt(document.getElementById('ruleMonths').value, 10);
+  var thenActivity= document.getElementById('ruleThenActivity').value;
+
+  showToast('⏳ Saving rule...', 1500, '#1565c0');
+  gasCall('saveRule', { id: id, ifActivity: ifActivity, operator: operator, count: count, months: months, thenActivity: thenActivity, active: true },
+    function(resp) {
+      showToast('✅ Rule saved!', 2000, '#2e7d32');
+      cancelRuleEdit();
+      loadRules();
+    });
+}
+
+function editRule(idx) {
+  var r = plannerRules[idx];
+  document.getElementById('ruleEditId').value          = r.id;
+  document.getElementById('ruleIfActivity').value      = r.ifActivity;
+  document.getElementById('ruleOperator').value        = r.operator;
+  document.getElementById('ruleCount').value           = r.count;
+  document.getElementById('ruleMonths').value          = r.months;
+  document.getElementById('ruleThenActivity').value    = r.thenActivity;
+  document.getElementById('ruleFormTitle').textContent = '✏️ Edit Rule';
+  document.getElementById('ruleCancelBtn').style.display = 'inline-block';
+  document.getElementById('ruleIfActivity').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function cancelRuleEdit() {
+  document.getElementById('ruleEditId').value          = '';
+  document.getElementById('ruleFormTitle').textContent = '+ New Rule';
+  document.getElementById('ruleCancelBtn').style.display = 'none';
+  document.getElementById('ruleIfActivity').value  = 'Field';
+  document.getElementById('ruleOperator').value    = '>=';
+  document.getElementById('ruleCount').value       = '1';
+  document.getElementById('ruleMonths').value      = '3';
+  document.getElementById('ruleThenActivity').value= 'Demo';
+}
+
+function toggleRule(idx) {
+  var r = plannerRules[idx];
+  gasCall('saveRule', { id: r.id, ifActivity: r.ifActivity, operator: r.operator, count: r.count, months: r.months, thenActivity: r.thenActivity, active: !r.active },
+    function() { loadRules(); });
+}
+
+function deleteRule(idx) {
+  var r = plannerRules[idx];
+  if (!confirm('Delete rule: IF ' + r.ifActivity + ' → PLAN ' + r.thenActivity + '?')) return;
+  gasCall('deleteRule', { id: r.id }, function() { loadRules(); });
+}
+
+// ════════════════════════════════════════════════════════════
+// PLAN GENERATION & VIEW
+// ════════════════════════════════════════════════════════════
+
+function doGeneratePlan() {
+  var month    = document.getElementById('planMonth').value;
+  var year     = document.getElementById('planYear').value;
+  var area     = document.getElementById('planArea').value;
+  var salesman = document.getElementById('planSalesman').value;
+  document.getElementById('planStatus').textContent = '⏳ Generating plan…';
+  document.getElementById('planTableWrap').innerHTML = '';
+
+  gasCall('generatePlan', { month: month, year: year, area: area, salesman: salesman }, function(data) {
+    document.getElementById('planStatus').textContent = '✅ ' + data.rowsGenerated + ' planned activities generated for ' + year + '-' + (month < 10 ? '0' : '') + month;
+    doLoadPlan();
+  }, function(err) {
+    document.getElementById('planStatus').textContent = '❌ Error: ' + (err && err.message || 'failed');
+  });
+}
+
+function doLoadPlan() {
+  var month    = document.getElementById('planMonth').value;
+  var year     = document.getElementById('planYear').value;
+  var area     = document.getElementById('planArea').value;
+  var salesman = document.getElementById('planSalesman').value;
+  document.getElementById('planStatus').textContent = '⏳ Loading…';
+
+  gasCall('getPlan', { month: month, year: year, area: area, salesman: salesman }, function(data) {
+    var rows = data.rows || [];
+    if (!rows.length) {
+      document.getElementById('planStatus').textContent = 'No plan found for this month. Click Generate Plan to create one.';
+      document.getElementById('planTableWrap').innerHTML = '';
+      return;
+    }
+    document.getElementById('planStatus').textContent = rows.length + ' activities planned';
+    renderPlanTable(rows);
+  });
+}
+
+var ACT_COLORS = {
+  'Field':            { bg:'#e8f5e9', color:'#1b5e20' },
+  'Demo':             { bg:'#e3f2fd', color:'#0d47a1' },
+  'Display+Canopy':   { bg:'#fff3e0', color:'#e65100' },
+  'Service Camp':     { bg:'#fce4ec', color:'#880e4f' },
+  'Tractor Service-At Field':    { bg:'#f3e5f5', color:'#4a148c' },
+  'Tractor Service-At Showroom': { bg:'#e0f2f1', color:'#004d40' }
+};
+
+function renderPlanTable(rows) {
+  // Group by salesman
+  var bySalesman = {};
+  rows.forEach(function(r) {
+    var s = r.salesman || 'Unassigned';
+    if (!bySalesman[s]) bySalesman[s] = [];
+    bySalesman[s].push(r);
+  });
+
+  var ACT_ICONS = { Field:'📋', Demo:'🎯', 'Display+Canopy':'🎪', 'Service Camp':'🏕️', 'Tractor Service-At Field':'🔧', 'Tractor Service-At Showroom':'🏭' };
+  var STATUS_COLORS = { Pending:'#f57f17', Done:'#2e7d32', Skipped:'#757575' };
+
+  var html = '';
+  Object.keys(bySalesman).sort().forEach(function(salesman) {
+    var sRows = bySalesman[salesman];
+    html += '<div style="margin-bottom:16px;">'
+      + '<div style="font-weight:700;font-size:13px;color:#1565c0;background:#e8eaf6;padding:8px 12px;border-radius:8px 8px 0 0;border:1.5px solid #c5cae9;">'
+      + '👤 ' + salesman + ' <span style="font-size:11px;color:#555;font-weight:400;">(' + sRows.length + ' activities)</span></div>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:12px;border:1.5px solid #c5cae9;border-top:none;">'
+      + '<thead><tr style="background:#f5f7ff;">'
+      + '<th style="padding:7px 10px;text-align:left;color:#555;font-weight:700;">Village</th>'
+      + '<th style="padding:7px 10px;text-align:left;color:#555;font-weight:700;">Area</th>'
+      + '<th style="padding:7px 10px;text-align:left;color:#555;font-weight:700;">Activity</th>'
+      + '<th style="padding:7px 10px;text-align:left;color:#555;font-weight:700;">Rule</th>'
+      + '<th style="padding:7px 10px;text-align:left;color:#555;font-weight:700;">Status</th>'
+      + '</tr></thead><tbody>';
+
+    sRows.forEach(function(r, i) {
+      var c   = ACT_COLORS[r.plannedActivity] || { bg:'#f5f5f5', color:'#333' };
+      var ico = ACT_ICONS[r.plannedActivity]  || '•';
+      var sc  = STATUS_COLORS[r.status]        || '#888';
+      html += '<tr style="background:' + (i%2===0?'#fff':'#fafbff') + ';">'
+        + '<td style="padding:7px 10px;font-weight:600;">' + r.village + '</td>'
+        + '<td style="padding:7px 10px;"><span style="background:' + (r.area==='Phagi'?'#e8f5e9':'#e3f2fd') + ';color:' + (r.area==='Phagi'?'#1b5e20':'#0d47a1') + ';padding:2px 7px;border-radius:10px;font-size:11px;font-weight:700;">' + (r.area||'?') + '</span></td>'
+        + '<td style="padding:7px 10px;"><span style="background:' + c.bg + ';color:' + c.color + ';padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;">' + ico + ' ' + r.plannedActivity + '</span></td>'
+        + '<td style="padding:7px 10px;color:#777;font-size:11px;">' + (r.ruleFired||'') + '</td>'
+        + '<td style="padding:7px 8px;">'
+        + '<select onchange="updateStatus(' + r.rowNum + ', this.value)" style="font-size:11px;font-weight:700;color:' + sc + ';background:#fff;border:1.5px solid #e0e0e0;border-radius:6px;padding:3px 6px;cursor:pointer;">'
+        + ['Pending','Done','Skipped'].map(function(s){ return '<option' + (r.status===s?' selected':'') + '>' + s + '</option>'; }).join('')
+        + '</select></td>'
+        + '</tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+
+  document.getElementById('planTableWrap').innerHTML = html;
+}
+
+function updateStatus(rowNum, status) {
+  gasCall('updatePlanStatus', { rowNum: rowNum, status: status }, function() {
+    showToast('✅ Status updated', 1500, '#2e7d32');
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// EMPLOYEE MASTER
+// ════════════════════════════════════════════════════════════
+
+var empList = [];
+var empLoadedOnce = false;
+
+function unlockEmployees() {
+  if (document.getElementById('empPwd').value === '220285') {
+    empUnlocked = true;
+    document.getElementById('empLockScreen').style.display = 'none';
+    document.getElementById('empContent').style.display    = 'block';
+    loadEmployees();
+  } else {
+    document.getElementById('empPwd').value = '';
+    document.getElementById('empPwd').placeholder = '❌ Wrong password';
+    setTimeout(function(){ document.getElementById('empPwd').placeholder = 'Password'; }, 1500);
+  }
+}
+
+function loadEmployees() {
+  document.getElementById('empListWrap').innerHTML = '<div style="color:#888;font-size:13px;padding:8px;">⏳ Loading...</div>';
+  gasCall('getEmployees', {}, function(data) {
+    empList = data.employees || [];
+    empLoadedOnce = true;
+    renderEmployeeList();
+  });
+}
+
+function renderEmployeeList() {
+  var wrap = document.getElementById('empListWrap');
+  if (!empList.length) {
+    wrap.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0;">No team members added yet.</div>';
+    return;
+  }
+  var ROLE_COLORS = {
+    Sales:    { bg:'#e3f2fd', color:'#0d47a1' },
+    Mechanic: { bg:'#fff3e0', color:'#e65100' },
+    Manager:  { bg:'#f3e5f5', color:'#6a1b9a' }
+  };
+  var LOC_COLORS = {
+    Phagi:     { bg:'#e8f5e9', color:'#1b5e20' },
+    Dudu:      { bg:'#e3f2fd', color:'#0d47a1' },
+    Mauzmabad: { bg:'#fce4ec', color:'#880e4f' }
+  };
+  wrap.innerHTML = empList.map(function(e, i) {
+    var rc  = ROLE_COLORS[e.role]     || { bg:'#f5f5f5', color:'#333' };
+    var lc  = LOC_COLORS[e.location]  || { bg:'#f5f5f5', color:'#333' };
+    var hasKey = !!e.callmebotKey;
+    return '<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #f0f0f0;flex-wrap:wrap;">'
+      + '<div style="flex:1;min-width:120px;">'
+      +   '<div style="font-weight:700;font-size:13px;color:#1a237e;">' + e.name + '</div>'
+      +   '<div style="font-size:11px;color:#888;margin-top:2px;">📱 ' + e.whatsapp + '</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">'
+      +   '<span style="background:' + rc.bg + ';color:' + rc.color + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">' + e.role + '</span>'
+      +   '<span style="background:' + lc.bg + ';color:' + lc.color + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">' + e.location + '</span>'
+      +   '<span style="background:' + (hasKey?'#e8f5e9':'#fce4ec') + ';color:' + (hasKey?'#2e7d32':'#c62828') + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">' + (hasKey?'✅ WA Ready':'⚠️ No Key') + '</span>'
+      +   (!e.active ? '<span style="background:#f5f5f5;color:#999;font-size:11px;padding:2px 8px;border-radius:10px;">Inactive</span>' : '')
+      + '</div>'
+      + '<div style="display:flex;gap:5px;">'
+      +   '<button onclick="editEmployee(' + i + ')" style="background:#e3f2fd;color:#1565c0;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">✏️</button>'
+      +   '<button onclick="confirmDeleteEmployee(' + i + ')" style="background:#fce4ec;color:#c62828;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">🗑</button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function editEmployee(idx) {
+  var e = empList[idx];
+  document.getElementById('empRowNum').value       = e.rowNum;
+  document.getElementById('empName').value         = e.name;
+  document.getElementById('empWhatsapp').value     = e.whatsapp;
+  document.getElementById('empRole').value         = e.role;
+  document.getElementById('empLocation').value     = e.location;
+  document.getElementById('empCallmebotKey').value = e.callmebotKey;
+  document.getElementById('empActive').checked     = e.active;
+  document.getElementById('empFormTitle').textContent  = '✏️ Edit — ' + e.name;
+  document.getElementById('empCancelBtn').style.display = 'inline-block';
+  document.getElementById('empName').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+function resetEmpForm() {
+  document.getElementById('empRowNum').value       = '';
+  document.getElementById('empName').value         = '';
+  document.getElementById('empWhatsapp').value     = '';
+  document.getElementById('empRole').value         = 'Sales';
+  document.getElementById('empLocation').value     = 'Phagi';
+  document.getElementById('empCallmebotKey').value = '';
+  document.getElementById('empActive').checked     = true;
+  document.getElementById('empFormTitle').textContent  = '➕ Add Team Member';
+  document.getElementById('empCancelBtn').style.display = 'none';
+}
+
+function saveEmployee() {
+  var name   = document.getElementById('empName').value.trim();
+  var mobile = document.getElementById('empWhatsapp').value.trim();
+  if (!name || !mobile) { showToast('Name और WhatsApp number जरूरी है', 2000, '#c62828'); return; }
+  var payload = {
+    rowNum:       document.getElementById('empRowNum').value,
+    name:         name,
+    whatsapp:     mobile,
+    role:         document.getElementById('empRole').value,
+    location:     document.getElementById('empLocation').value,
+    callmebotKey: document.getElementById('empCallmebotKey').value.trim(),
+    active:       document.getElementById('empActive').checked
+  };
+  showToast('⏳ Saving...', 1500, '#1565c0');
+  gasCall('saveEmployee', payload, function() {
+    showToast('✅ Saved!', 2000, '#2e7d32');
+    resetEmpForm();
+    loadEmployees();
+  });
+}
+
+function confirmDeleteEmployee(idx) {
+  var e = empList[idx];
+  if (!confirm('Delete ' + e.name + ' from team master?')) return;
+  gasCall('deleteEmployee', { rowNum: e.rowNum }, function() {
+    showToast('🗑 Deleted', 1500, '#555');
+    loadEmployees();
+  });
+}
+
+function sendReminderToAll() {
+  var msg    = document.getElementById('reminderMsg').value.trim();
+  var btn    = document.querySelector('[onclick="sendReminderToAll()"]');
+  var status = document.getElementById('reminderStatus');
+  var ready  = empList.filter(function(e){ return e.active && e.whatsapp && e.callmebotKey; });
+  if (!ready.length) {
+    status.style.color   = '#c62828';
+    status.textContent   = '⚠️ कोई भी team member WhatsApp के लिए ready नहीं है। पहले CallMeBot Key add करें।';
+    return;
+  }
+  btn.disabled    = true;
+  btn.textContent = '⏳ Sending to ' + ready.length + ' members...';
+  status.style.color  = '#1565c0';
+  status.textContent  = 'Please wait…';
+  gasCall('sendReminders', { message: msg }, function(data) {
+    btn.disabled    = false;
+    btn.textContent = '📢 Send Now to All';
+    status.style.color = data.sent > 0 ? '#2e7d32' : '#e65100';
+    status.textContent = '✅ ' + data.sent + '/' + data.total + ' members को message भेजा गया!';
+    if (data.failed && data.failed.length) {
+      status.textContent += ' ⚠️ Failed: ' + data.failed.join(', ');
+      status.style.color  = '#e65100';
+    }
+  }, function() {
+    btn.disabled    = false;
+    btn.textContent = '📢 Send Now to All';
+    status.style.color = '#c62828';
+    status.textContent = '❌ Error sending. Try again.';
+  });
 }
 </script>
 </body>
