@@ -2407,8 +2407,10 @@
         <div id="psection-plan" style="padding:12px;">
           <div class="card">
             <div class="card-title">📋 Monthly Activity Plan</div>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-              <select id="planMonth" style="flex:1;min-width:100px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
+            <!-- Month navigation row -->
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+              <button onclick="changePlanMonth(-1)" style="background:#e8eaf6;color:#3949ab;border:none;border-radius:7px;padding:7px 12px;font-size:15px;font-weight:700;cursor:pointer;">◀</button>
+              <select id="planMonth" style="flex:1;min-width:90px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
                 <option value="1">January</option><option value="2">February</option>
                 <option value="3">March</option><option value="4">April</option>
                 <option value="5">May</option><option value="6">June</option>
@@ -2416,7 +2418,11 @@
                 <option value="9">September</option><option value="10">October</option>
                 <option value="11">November</option><option value="12">December</option>
               </select>
-              <select id="planYear" style="flex:1;min-width:90px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;"></select>
+              <select id="planYear" style="flex:1;min-width:80px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;"></select>
+              <button onclick="changePlanMonth(1)" style="background:#e8eaf6;color:#3949ab;border:none;border-radius:7px;padding:7px 12px;font-size:15px;font-weight:700;cursor:pointer;">▶</button>
+            </div>
+            <!-- Filters row -->
+            <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
               <select id="planArea" style="flex:1;min-width:90px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
                 <option value="All">All Areas</option>
                 <option value="Phagi">Phagi</option>
@@ -2428,9 +2434,11 @@
                 <option>Roduram</option><option>Hemraj</option>
               </select>
             </div>
-            <div style="display:flex;gap:8px;margin-bottom:12px;">
-              <button onclick="doGeneratePlan()" style="flex:1;background:#7b1fa2;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">⚡ Generate Plan</button>
-              <button onclick="doLoadPlan()"     style="flex:1;background:#1565c0;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Load Plan</button>
+            <!-- Action buttons -->
+            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+              <button onclick="doGeneratePlan()" style="flex:2;background:#7b1fa2;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">⚡ Generate Plan</button>
+              <button onclick="doLoadPlan()"     style="flex:2;background:#1565c0;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Load Plan</button>
+              <button onclick="doExportCSV()"    style="flex:1;background:#e8f5e9;color:#1b5e20;border:1.5px solid #a5d6a7;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">📥 CSV</button>
             </div>
             <div id="planStatus" style="font-size:12px;color:#888;margin-bottom:8px;"></div>
             <div id="planTableWrap" style="overflow-x:auto;"></div>
@@ -5919,6 +5927,7 @@ function showSaveConfirm(respMsg, callback) {
 
 // ── Village master (client-side cache) ──────────────────────
 var plannerVillages = [];
+var currentPlanRows = [];  // used by export
 
 // Deduplicated village seed from the uploaded village master xlsx.
 // Key = VILLAGE_UPPER, value = { village, area }
@@ -6239,6 +6248,21 @@ function saveRule() {
   var id           = document.getElementById('ruleEditId').value;
   if (!conditions.length) { showToast('कम से कम 1 condition जरूरी है', 2000, '#c62828'); return; }
 
+  // ── #4 Duplicate rule prevention ─────────────────────────
+  if (!id) {
+    var isDuplicate = plannerRules.some(function(r) {
+      if (!r.active) return false;
+      if (r.thenActivity !== thenActivity || r.logicOp !== logicOp) return false;
+      if (r.conditions.length !== conditions.length) return false;
+      return r.conditions.every(function(rc, i) {
+        var nc = conditions[i];
+        return rc.ifActivity === nc.ifActivity && rc.operator === nc.operator &&
+               String(rc.count) === String(nc.count) && String(rc.months) === String(nc.months);
+      });
+    });
+    if (isDuplicate) { showToast('⚠️ Same rule already exists!', 2500, '#e65100'); return; }
+  }
+
   showToast('⏳ Saving rule...', 1500, '#1565c0');
   gasCall('saveRule', { id: id, conditions: JSON.stringify(conditions), logicOp: logicOp, thenActivity: thenActivity, active: true },
     function() {
@@ -6290,6 +6314,40 @@ function deleteRule(idx) {
 // PLAN GENERATION & VIEW
 // ════════════════════════════════════════════════════════════
 
+// ── #6 Month navigation ──────────────────────────────────────
+function changePlanMonth(dir) {
+  var m = parseInt(document.getElementById('planMonth').value, 10) + dir;
+  var y = parseInt(document.getElementById('planYear').value, 10);
+  if (m < 1)  { m = 12; y--; }
+  if (m > 12) { m = 1;  y++; }
+  document.getElementById('planMonth').value = m;
+  document.getElementById('planYear').value  = y;
+  doLoadPlan();
+}
+
+// ── #3 Export plan to CSV ────────────────────────────────────
+function doExportCSV() {
+  if (!currentPlanRows.length) { showToast('कोई plan नहीं है export के लिए', 2000, '#c62828'); return; }
+  var m = document.getElementById('planMonth').value;
+  var y = document.getElementById('planYear').value;
+  var months = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var csv = 'Village,Area,Salesman,Planned Activity,Rule,Status\n';
+  currentPlanRows.forEach(function(r) {
+    csv += [r.village, r.area, r.salesman, r.plannedActivity, r.ruleFired, r.status]
+      .map(function(v){ return '"' + (v||'').replace(/"/g,'""') + '"'; }).join(',') + '\n';
+  });
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'ActivityPlan_' + months[+m] + '_' + y + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('✅ CSV downloaded!', 2000, '#2e7d32');
+}
+
 function doGeneratePlan() {
   var month    = document.getElementById('planMonth').value;
   var year     = document.getElementById('planYear').value;
@@ -6299,8 +6357,13 @@ function doGeneratePlan() {
   document.getElementById('planTableWrap').innerHTML = '';
 
   gasCall('generatePlan', { month: month, year: year, area: area, salesman: salesman }, function(data) {
-    document.getElementById('planStatus').textContent = '✅ ' + data.rowsGenerated + ' planned activities generated for ' + year + '-' + (month < 10 ? '0' : '') + month;
-    doLoadPlan();
+    var n = data.rowsGenerated || 0;
+    if (n === 0) {
+      document.getElementById('planStatus').textContent = '⚠️ 0 activities generated — check that active rules exist and CRM has matching entries in the lookback window.';
+    } else {
+      document.getElementById('planStatus').textContent = '✅ ' + n + ' planned activities generated for ' + year + '-' + (month < 10 ? '0' : '') + month;
+      doLoadPlan();
+    }
   }, function(err) {
     document.getElementById('planStatus').textContent = '❌ Error: ' + (err && err.message || 'failed');
   });
@@ -6318,9 +6381,14 @@ function doLoadPlan() {
     if (!rows.length) {
       document.getElementById('planStatus').textContent = 'No plan found for this month. Click Generate Plan to create one.';
       document.getElementById('planTableWrap').innerHTML = '';
+      currentPlanRows = [];
       return;
     }
-    document.getElementById('planStatus').textContent = rows.length + ' activities planned';
+    currentPlanRows = rows;
+    var done    = rows.filter(function(r){ return r.status === 'Done'; }).length;
+    var skipped = rows.filter(function(r){ return r.status === 'Skipped'; }).length;
+    var pct     = Math.round(done / rows.length * 100);
+    document.getElementById('planStatus').textContent = rows.length + ' activities planned — ✅ ' + done + ' Done, ⏭️ ' + skipped + ' Skipped, ⏳ ' + (rows.length - done - skipped) + ' Pending (' + pct + '% complete)';
     renderPlanTable(rows);
   });
 }
@@ -6346,12 +6414,31 @@ function renderPlanTable(rows) {
   var ACT_ICONS = { Field:'📋', Demo:'🎯', 'Display+Canopy':'🎪', 'Service Camp':'🏕️', 'Tractor Service-At Field':'🔧', 'Tractor Service-At Showroom':'🏭' };
   var STATUS_COLORS = { Pending:'#f57f17', Done:'#2e7d32', Skipped:'#757575' };
 
-  var html = '';
+  // ── #2 Per-salesman completion summary ──────────────────────
+  var summaryHtml = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">';
+  Object.keys(bySalesman).sort().forEach(function(s) {
+    var sr   = bySalesman[s];
+    var done = sr.filter(function(r){ return r.status==='Done'; }).length;
+    var skip = sr.filter(function(r){ return r.status==='Skipped'; }).length;
+    var pend = sr.length - done - skip;
+    var pct  = Math.round(done / sr.length * 100);
+    summaryHtml += '<div style="flex:1;min-width:140px;background:#f8f9ff;border:1.5px solid #c5cae9;border-radius:10px;padding:10px 12px;">'
+      + '<div style="font-weight:700;font-size:12px;color:#1565c0;margin-bottom:4px;">👤 ' + s + '</div>'
+      + '<div style="font-size:11px;color:#555;margin-bottom:6px;">✅ ' + done + '  ⏭️ ' + skip + '  ⏳ ' + pend + ' / ' + sr.length + '</div>'
+      + '<div style="background:#e0e0e0;border-radius:4px;height:6px;">'
+      + '<div style="background:' + (pct===100?'#2e7d32':'#1565c0') + ';width:' + pct + '%;height:6px;border-radius:4px;transition:width 0.4s;"></div></div>'
+      + '<div style="font-size:10px;color:#888;margin-top:3px;">' + pct + '% done</div>'
+      + '</div>';
+  });
+  summaryHtml += '</div>';
+
+  var html = summaryHtml;
   Object.keys(bySalesman).sort().forEach(function(salesman) {
     var sRows = bySalesman[salesman];
+    var sDone = sRows.filter(function(r){ return r.status==='Done'; }).length;
     html += '<div style="margin-bottom:16px;">'
       + '<div style="font-weight:700;font-size:13px;color:#1565c0;background:#e8eaf6;padding:8px 12px;border-radius:8px 8px 0 0;border:1.5px solid #c5cae9;">'
-      + '👤 ' + salesman + ' <span style="font-size:11px;color:#555;font-weight:400;">(' + sRows.length + ' activities)</span></div>'
+      + '👤 ' + salesman + ' <span style="font-size:11px;color:#555;font-weight:400;">(' + sDone + '/' + sRows.length + ' done)</span></div>'
       + '<table style="width:100%;border-collapse:collapse;font-size:12px;border:1.5px solid #c5cae9;border-top:none;">'
       + '<thead><tr style="background:#f5f7ff;">'
       + '<th style="padding:7px 10px;text-align:left;color:#555;font-weight:700;">Village</th>'
