@@ -247,7 +247,7 @@
 
   // ── gasCall() — replaces all google.script.run calls ──────
   function gasCall(action, params, onSuccess, onFailure) {
-    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride','saveDelivery','saveVillage','saveRule','deleteRule','generatePlan','updatePlanStatus','saveEmployee','deleteEmployee','sendReminders'].indexOf(action) !== -1;
+    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride','saveDelivery','saveVillage','saveRule','deleteRule','generatePlan','updatePlanStatus','saveEmployee','deleteEmployee','sendReminders','assignPlanRow','publishPlan','saveChosenActivity'].indexOf(action) !== -1;
     var promise;
     if (isWrite) {
       // POST for write operations (image uploads etc.)
@@ -1302,6 +1302,9 @@
     </button>
     <button id="tab-employees" class="tab-btn"         onclick="showTab('employees')">
       <span class="tab-icon">👥</span>Team
+    </button>
+    <button id="tab-calendar" class="tab-btn"          onclick="showTab('calendar')">
+      <span class="tab-icon">🗓️</span>Calendar
     </button>
   </div>
 
@@ -2435,10 +2438,13 @@
               </select>
             </div>
             <!-- Action buttons -->
-            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+            <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
               <button onclick="doGeneratePlan()" style="flex:2;background:#7b1fa2;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">⚡ Generate Plan</button>
               <button onclick="doLoadPlan()"     style="flex:2;background:#1565c0;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Load Plan</button>
               <button onclick="doExportCSV()"    style="flex:1;background:#e8f5e9;color:#1b5e20;border:1.5px solid #a5d6a7;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">📥 CSV</button>
+            </div>
+            <div style="margin-bottom:12px;">
+              <button onclick="doPublishPlan()" style="width:100%;background:#e65100;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">🚀 Publish Plan (share with team)</button>
             </div>
             <div id="planStatus" style="font-size:12px;color:#888;margin-bottom:8px;"></div>
             <div id="planTableWrap" style="overflow-x:auto;"></div>
@@ -2474,15 +2480,7 @@
                 <button onclick="addRuleCondition()" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;">+ Add Condition</button>
               </div>
 
-              <!-- Then -->
-              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;">
-                <span style="font-size:12px;font-weight:700;color:#2e7d32;white-space:nowrap;">→ PLAN</span>
-                <select id="ruleThenActivity" style="flex:1;min-width:130px;padding:7px;border:1.5px solid #a5d6a7;border-radius:7px;font-size:12px;background:#f1f8e9;">
-                  <option>Demo</option><option>Field</option><option>Display+Canopy</option>
-                  <option>Service Camp</option><option>Tractor Service-At Field</option><option>Tractor Service-At Showroom</option>
-                </select>
-                <span style="font-size:12px;font-weight:700;color:#555;white-space:nowrap;">for this village</span>
-              </div>
+              <!-- Per-condition → PLAN is now inline in each condition row -->
 
               <div style="display:flex;gap:8px;">
                 <button onclick="saveRule()" style="background:#2e7d32;color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">💾 Save Rule</button>
@@ -2640,6 +2638,29 @@
 
       </div><!-- /empContent -->
     </div><!-- /section-employees -->
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!--  TEAM CALENDAR (no password)                         -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-calendar" class="section">
+      <div class="card">
+        <div class="card-title">🗓️ Team Monthly Calendar</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+          <select id="calMonth" style="flex:1;min-width:100px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
+            <option value="1">January</option><option value="2">February</option>
+            <option value="3">March</option><option value="4">April</option>
+            <option value="5">May</option><option value="6">June</option>
+            <option value="7">July</option><option value="8">August</option>
+            <option value="9">September</option><option value="10">October</option>
+            <option value="11">November</option><option value="12">December</option>
+          </select>
+          <select id="calYear" style="flex:1;min-width:80px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;"></select>
+          <button onclick="loadCalendar()" style="background:#1565c0;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Load</button>
+        </div>
+        <div id="calStatus" style="font-size:12px;color:#888;margin-bottom:8px;"></div>
+        <div id="calWrap" style="overflow-x:auto;"></div>
+      </div>
+    </div><!-- /section-calendar -->
 
     <!-- ════════════════════════════════════════════════════ -->
     <!--  SERVICE REPORT                                      -->
@@ -3072,10 +3093,11 @@ window.onload = function() {
 // TABS
 // ════════════════════════════════════════════════════════════
 function showTab(tab) {
-  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap","report","target","delivery","planner","employees"].forEach(function(t) {
+  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap","report","target","delivery","planner","employees","calendar"].forEach(function(t) {
     document.getElementById("section-" + t).classList.toggle("active", t === tab);
     document.getElementById("tab-" + t).classList.toggle("active", t === tab);
   });
+  if (tab === "calendar") { initCalendarSelectors(); loadCalendar(); return; }
   if (tab === "dashboard") loadFilterOptions();
   if (tab === "daily") autoStartGPS();
   if (tab === "fieldmap") {
@@ -6168,6 +6190,9 @@ function conditionRowHTML(idx, cond) {
   var opOpts  = Object.keys(OPS_MAP).map(function(k){ return '<option value="' + k + '"' + (k === operator ? ' selected' : '') + '>' + OPS_MAP[k] + '</option>'; }).join('');
   var cntOpts = [1,2,3,4,5].map(function(n){ return '<option' + (n == count ? ' selected' : '') + '>' + n + '</option>'; }).join('');
   var mnOpts  = [[1,'1 month'],[2,'2 months'],[3,'3 months'],[6,'6 months'],[12,'12 months']].map(function(m){ return '<option value="' + m[0] + '"' + (m[0] == months ? ' selected' : '') + '>' + m[1] + '</option>'; }).join('');
+  var thenAct = cond.thenActivity || '';
+  var thenOpts = '<option value="">— Plan —</option>'
+    + ACT_OPTIONS.map(function(a){ return '<option value="' + a + '"' + (a === thenAct ? ' selected' : '') + '>' + a + '</option>'; }).join('');
   var isZero  = operator === '=0';
 
   return '<div class="cond-row" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:#fff;border:1.5px solid #e8eaf6;border-radius:8px;padding:8px 10px;">'
@@ -6178,6 +6203,8 @@ function conditionRowHTML(idx, cond) {
     + '<select class="cond-count" style="width:60px;padding:6px;border:1.5px solid #c5cae9;border-radius:6px;font-size:12px;' + (isZero ? 'display:none;' : '') + '">' + cntOpts + '</select>'
     + '<span class="cond-times" style="font-size:11px;font-weight:600;color:#555;white-space:nowrap;' + (isZero ? 'display:none;' : '') + '">times in</span>'
     + '<select class="cond-months" style="width:80px;padding:6px;border:1.5px solid #c5cae9;border-radius:6px;font-size:12px;">' + mnOpts + '</select>'
+    + '<span style="font-size:11px;font-weight:700;color:#2e7d32;white-space:nowrap;">→ PLAN</span>'
+    + '<select class="cond-then" style="flex:1;min-width:100px;padding:6px;border:1.5px solid #a5d6a7;border-radius:6px;font-size:12px;background:#f1f8e9;">' + thenOpts + '</select>'
     + (idx > 0 ? '<button onclick="removeCondRow(this)" style="background:#fce4ec;color:#c62828;border:none;border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;flex-shrink:0;">✕</button>' : '<span style="width:30px;"></span>')
     + '</div>';
 }
@@ -6219,11 +6246,12 @@ function getConditionsFromForm() {
   var conds = [];
   rows.forEach(function(row) {
     conds.push({
-      fieldType: row.querySelector('.cond-fieldtype').value,
-      ifValue:   row.querySelector('.cond-value').value,
-      operator:  row.querySelector('.cond-op').value,
-      count:     parseInt(row.querySelector('.cond-count').value, 10) || 0,
-      months:    parseInt(row.querySelector('.cond-months').value, 10) || 1
+      fieldType:    row.querySelector('.cond-fieldtype').value,
+      ifValue:      row.querySelector('.cond-value').value,
+      operator:     row.querySelector('.cond-op').value,
+      count:        parseInt(row.querySelector('.cond-count').value, 10) || 0,
+      months:       parseInt(row.querySelector('.cond-months').value, 10) || 1,
+      thenActivity: row.querySelector('.cond-then').value
     });
   });
   return conds;
@@ -6248,23 +6276,29 @@ function renderRules() {
     return;
   }
   wrap.innerHTML = plannerRules.map(function(r, i) {
+    var hasPerCond = r.conditions.some(function(c){ return c.thenActivity; });
     var condHtml = r.conditions.map(function(c, ci) {
-      var opLbl = OPS_MAP[c.operator] || c.operator;
-      var cntTxt = c.operator === '=0' ? '' : ' ' + c.count + ' time' + (c.count > 1 ? 's' : '') + ' in';
-      var joiner = ci < r.conditions.length - 1
+      var opLbl    = OPS_MAP[c.operator] || c.operator;
+      var cntTxt   = c.operator === '=0' ? '' : ' ' + c.count + ' time' + (c.count > 1 ? 's' : '') + ' in';
+      var fieldLbl = (c.fieldType === 'status' ? '[Status] ' : '') + (c.ifValue || c.ifActivity || '');
+      var thenBadge = (hasPerCond && c.thenActivity)
+        ? ' <span style="color:#2e7d32;font-size:10px;font-weight:700;">→ ' + c.thenActivity + '</span>'
+        : '';
+      var joiner = (!hasPerCond && ci < r.conditions.length - 1)
         ? '<span style="background:' + (r.logicOp==='AND'?'#e8eaf6':'#fff3e0') + ';color:' + (r.logicOp==='AND'?'#283593':'#e65100') + ';font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;margin:0 2px;">' + r.logicOp + '</span>'
         : '';
-      var fieldLbl = (c.fieldType === 'status' ? '[Status] ' : '') + (c.ifValue || c.ifActivity || '');
       return '<span style="background:' + (c.fieldType === 'status' ? '#fce4ec' : '#e3f2fd') + ';color:' + (c.fieldType === 'status' ? '#880e4f' : '#0d47a1') + ';padding:2px 8px;border-radius:6px;font-size:11px;">'
         + fieldLbl + ' ' + opLbl + cntTxt + ' ' + c.months + 'm'
-        + '</span>' + joiner;
+        + '</span>' + thenBadge + joiner;
     }).join(' ');
+
+    var thenSection = hasPerCond ? '' :
+      (' <span style="color:#555;font-weight:700;">→ PLAN</span> '
+      + r.thenActivity.split(',').map(function(a){ return '<span style="background:#e8f5e9;color:#1b5e20;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">' + a.trim() + '</span>'; }).join(' '));
 
     return '<div style="background:#fff;border:1.5px solid ' + (r.active?'#c5cae9':'#e0e0e0') + ';border-radius:10px;padding:12px 14px;opacity:' + (r.active?'1':'0.55') + ';">'
       + '<div style="font-size:12px;color:#333;line-height:2.0;margin-bottom:8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">'
-      + '<b style="color:#555;">IF</b> ' + condHtml
-      + ' <span style="color:#555;font-weight:700;">→ PLAN</span> '
-      + '<span style="background:#e8f5e9;color:#1b5e20;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">' + r.thenActivity + '</span>'
+      + '<b style="color:#555;">IF</b> ' + condHtml + thenSection
       + '</div>'
       + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
       + '<button onclick="editRule(' + i + ')" style="background:#e3f2fd;color:#1565c0;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">✏️ Edit</button>'
@@ -6277,11 +6311,15 @@ function renderRules() {
 function saveRule() {
   var conditions   = getConditionsFromForm();
   var logicOp      = getLogicOp();
-  var thenActivity = document.getElementById('ruleThenActivity').value;
   var id           = document.getElementById('ruleEditId').value;
   if (!conditions.length) { showToast('कम से कम 1 condition जरूरी है', 2000, '#c62828'); return; }
+  // Per-condition mode: derive rule-level thenActivity from unique condition thenActivities
+  var condActivities = conditions.map(function(c){ return c.thenActivity; }).filter(Boolean);
+  var thenActivity = condActivities.length
+    ? condActivities.filter(function(v,i,a){ return a.indexOf(v)===i; }).join(',')
+    : '';
 
-  // ── #4 Duplicate rule prevention ─────────────────────────
+  // ── Duplicate rule prevention ──────────────────────────────
   if (!id) {
     var isDuplicate = plannerRules.some(function(r) {
       if (!r.active) return false;
@@ -6312,12 +6350,11 @@ function editRule(idx) {
   document.getElementById('ruleEditId').value = r.id;
   document.getElementById('ruleFormTitle').textContent = '✏️ Edit Rule';
   document.getElementById('ruleCancelBtn').style.display = 'inline-block';
-  document.getElementById('ruleThenActivity').value = r.thenActivity;
+  setThenActivities(r.thenActivity || '');
   setLogicOp(r.logicOp || 'AND');
-  // Rebuild conditions
   var container = document.getElementById('ruleConditions');
   container.innerHTML = '';
-  (r.conditions || []).forEach(function(c, i) { addRuleCondition(c); });
+  (r.conditions || []).forEach(function(c) { addRuleCondition(c); });
   if (!r.conditions.length) addRuleCondition();
   document.getElementById('ruleConditions').scrollIntoView({ behavior:'smooth', block:'center' });
 }
@@ -6326,11 +6363,11 @@ function cancelRuleEdit() {
   document.getElementById('ruleEditId').value = '';
   document.getElementById('ruleFormTitle').textContent = '+ New Rule';
   document.getElementById('ruleCancelBtn').style.display = 'none';
-  document.getElementById('ruleThenActivity').value = 'Demo';
+  clearThenActivities();
   setLogicOp('AND');
   var container = document.getElementById('ruleConditions');
   container.innerHTML = '';
-  addRuleCondition(); // one blank condition
+  addRuleCondition();
 }
 
 function toggleRule(idx) {
@@ -6341,7 +6378,7 @@ function toggleRule(idx) {
 
 function deleteRule(idx) {
   var r = plannerRules[idx];
-  if (!confirm('Delete this rule → PLAN ' + r.thenActivity + '?')) return;
+  if (!confirm('Delete this rule → PLAN ' + r.thenActivity.split(',').join(', ') + '?')) return;
   gasCall('deleteRule', { id: r.id }, function() { loadRules(); });
 }
 
@@ -6475,7 +6512,7 @@ function renderPlanTable(rows) {
   });
 
   var ACT_ICONS = { Field:'📋', Demo:'🎯', 'Display+Canopy':'🎪', 'Service Camp':'🏕️', 'Tractor Service-At Field':'🔧', 'Tractor Service-At Showroom':'🏭' };
-  var STATUS_COLORS = { Pending:'#f57f17', Done:'#2e7d32', Skipped:'#757575' };
+  var STATUS_COLORS = { Pending:'#f57f17', Done:'#2e7d32', Skipped:'#757575', 'Select Activity':'#7b1fa2' };
 
   // ── #2 Per-salesman completion summary ──────────────────────
   var summaryHtml = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">';
@@ -6504,23 +6541,38 @@ function renderPlanTable(rows) {
       + '👤 ' + salesman + ' <span style="font-size:11px;color:#555;font-weight:400;">(' + sDone + '/' + sRows.length + ' done)</span></div>'
       + '<table style="width:100%;border-collapse:collapse;font-size:12px;border:1.5px solid #c5cae9;border-top:none;">'
       + '<thead><tr style="background:#f5f7ff;">'
-      + '<th style="padding:7px 10px;text-align:left;color:#555;font-weight:700;">Village</th>'
-      + '<th style="padding:7px 10px;text-align:left;color:#555;font-weight:700;">Area</th>'
-      + '<th style="padding:7px 10px;text-align:left;color:#555;font-weight:700;">Activity</th>'
-      + '<th style="padding:7px 10px;text-align:left;color:#555;font-weight:700;">Rule</th>'
-      + '<th style="padding:7px 10px;text-align:left;color:#555;font-weight:700;">Status</th>'
+      + '<th style="padding:7px 8px;text-align:left;color:#555;font-weight:700;">Village</th>'
+      + '<th style="padding:7px 8px;text-align:left;color:#555;font-weight:700;">Area</th>'
+      + '<th style="padding:7px 8px;text-align:left;color:#555;font-weight:700;">Activity</th>'
+      + '<th style="padding:7px 8px;text-align:left;color:#555;font-weight:700;">📅 Date</th>'
+      + '<th style="padding:7px 8px;text-align:left;color:#555;font-weight:700;">👥 Team</th>'
+      + '<th style="padding:7px 8px;text-align:left;color:#555;font-weight:700;">Status</th>'
       + '</tr></thead><tbody>';
 
     sRows.forEach(function(r, i) {
-      var c   = ACT_COLORS[r.plannedActivity] || { bg:'#f5f5f5', color:'#333' };
-      var ico = ACT_ICONS[r.plannedActivity]  || '•';
-      var sc  = STATUS_COLORS[r.status]        || '#888';
-      html += '<tr style="background:' + (i%2===0?'#fff':'#fafbff') + ';">'
-        + '<td style="padding:7px 10px;font-weight:600;">' + r.village + '</td>'
-        + '<td style="padding:7px 10px;"><span style="background:' + (r.area==='Phagi'?'#e8f5e9':'#e3f2fd') + ';color:' + (r.area==='Phagi'?'#1b5e20':'#0d47a1') + ';padding:2px 7px;border-radius:10px;font-size:11px;font-weight:700;">' + (r.area||'?') + '</span></td>'
-        + '<td style="padding:7px 10px;"><span style="background:' + c.bg + ';color:' + c.color + ';padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;">' + ico + ' ' + r.plannedActivity + '</span></td>'
-        + '<td style="padding:7px 10px;color:#777;font-size:11px;">' + (r.ruleFired||'') + '</td>'
-        + '<td style="padding:7px 8px;">'
+      var isMulti = r.status === 'Select Activity';
+      var c    = ACT_COLORS[r.plannedActivity] || { bg:'#f5f5f5', color:'#333' };
+      var ico  = ACT_ICONS[r.plannedActivity]  || '•';
+      var sc   = STATUS_COLORS[r.status]        || '#888';
+      var team = (r.assignedTeam||[]).map(function(m){ return m.name; }).join(', ') || '—';
+      var dateStr = r.assignedDate ? r.assignedDate.substring(8,10) + '/' + r.assignedDate.substring(5,7) : '—';
+      var actCell = isMulti
+        ? '<select onchange="saveChosenActivity(' + r.rowNum + ',this.value)" style="font-size:11px;font-weight:700;color:#7b1fa2;background:#f3e5f5;border:1.5px solid #ce93d8;border-radius:6px;padding:4px 6px;cursor:pointer;">'
+          + '<option value="">⚠️ Select Activity</option>'
+          + r.plannedActivity.split('|').map(function(a){ return '<option value="' + a.trim() + '">' + a.trim() + '</option>'; }).join('')
+          + '</select>'
+        : '<span style="background:' + c.bg + ';color:' + c.color + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">' + ico + ' ' + r.plannedActivity + '</span>';
+      html += '<tr style="background:' + (isMulti ? '#fdf6ff' : (i%2===0?'#fff':'#fafbff')) + ';">'
+        + '<td style="padding:6px 8px;font-weight:600;">' + r.village + '</td>'
+        + '<td style="padding:6px 8px;"><span style="background:' + (r.area==='Phagi'?'#e8f5e9':'#e3f2fd') + ';color:' + (r.area==='Phagi'?'#1b5e20':'#0d47a1') + ';padding:2px 6px;border-radius:10px;font-size:11px;font-weight:700;">' + (r.area||'?') + '</span></td>'
+        + '<td style="padding:6px 8px;">' + actCell + '</td>'
+        + '<td style="padding:6px 8px;font-size:11px;color:#555;">' + dateStr + '</td>'
+        + '<td style="padding:6px 8px;font-size:11px;">'
+        + '<div style="display:flex;flex-direction:column;gap:3px;">'
+        + '<span style="color:#444;">' + team + '</span>'
+        + '<button onclick="openAssignModal(' + r.rowNum + ')" style="background:#e3f2fd;color:#1565c0;border:none;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;width:fit-content;">📌 Assign</button>'
+        + '</div></td>'
+        + '<td style="padding:6px 8px;">'
         + '<select onchange="updateStatus(' + r.rowNum + ', this.value)" style="font-size:11px;font-weight:700;color:' + sc + ';background:#fff;border:1.5px solid #e0e0e0;border-radius:6px;padding:3px 6px;cursor:pointer;">'
         + ['Pending','Done','Skipped'].map(function(s){ return '<option' + (r.status===s?' selected':'') + '>' + s + '</option>'; }).join('')
         + '</select></td>'
@@ -6536,6 +6588,180 @@ function updateStatus(rowNum, status) {
   gasCall('updatePlanStatus', { rowNum: rowNum, status: status }, function() {
     showToast('✅ Status updated', 1500, '#2e7d32');
   });
+}
+
+function saveChosenActivity(rowNum, activity) {
+  if (!activity) return;
+  gasCall('saveChosenActivity', { rowNum: rowNum, activity: activity }, function() {
+    showToast('✅ Activity selected — row is now Pending', 2000, '#2e7d32');
+    doLoadPlan();
+  });
+}
+
+// ── Multi-activity rule helpers ───────────────────────────────
+function getThenActivities() {
+  return Array.prototype.slice.call(document.querySelectorAll('[name="thenAct"]:checked'))
+    .map(function(cb){ return cb.value; });
+}
+
+function setThenActivities(csv) {
+  var vals = (csv || '').split(',').map(function(v){ return v.trim(); });
+  document.querySelectorAll('[name="thenAct"]').forEach(function(cb){
+    cb.checked = vals.indexOf(cb.value) !== -1;
+  });
+}
+
+function clearThenActivities() {
+  document.querySelectorAll('[name="thenAct"]').forEach(function(cb){ cb.checked = false; });
+}
+
+// ── Publish plan ──────────────────────────────────────────────
+function doPublishPlan() {
+  var month = document.getElementById('planMonth').value;
+  var year  = document.getElementById('planYear').value;
+  if (!currentPlanRows.length) { showToast('पहले Plan Load करें', 2000, '#c62828'); return; }
+  if (!confirm('यह plan team के Calendar tab में दिखेगा। Publish करें?')) return;
+  gasCall('publishPlan', { month: month, year: year }, function(data) {
+    showToast('🚀 Plan published! ' + (data.count||0) + ' activities visible in Calendar.', 3000, '#2e7d32');
+  });
+}
+
+// ── Assign date + team modal ──────────────────────────────────
+var _assignRowNum = null;
+
+function openAssignModal(rowNum) {
+  _assignRowNum = rowNum;
+  var month = document.getElementById('planMonth').value;
+  var year  = document.getElementById('planYear').value;
+
+  var empOpts = empList.length
+    ? empList.filter(function(e){ return e.active; }).map(function(e){
+        return '<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;cursor:pointer;">'
+          + '<input type="checkbox" name="assignTeam" value="' + e.name + '" data-role="' + (e.role||'Salesman') + '"> '
+          + '<span><b>' + e.name + '</b> <span style="color:#888;font-size:11px;">(' + (e.role||'Salesman') + ')</span></span></label>';
+      }).join('')
+    : '<div style="color:#888;font-size:12px;">No employees loaded. Go to Team tab first.</div>';
+
+  var overlay = document.createElement('div');
+  overlay.id = 'assignOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding-top:60px;';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:14px;padding:20px;max-width:340px;width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.25);">'
+    + '<div style="font-size:15px;font-weight:700;color:#1a237e;margin-bottom:14px;">📌 Assign Activity</div>'
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px;">📅 Date</label>'
+    + '<input type="date" id="assignDateInput" min="' + year + '-' + (month<10?'0':'') + month + '-01" style="width:100%;box-sizing:border-box;padding:8px;border:1.5px solid #c5cae9;border-radius:7px;font-size:13px;">'
+    + '</div>'
+    + '<div style="margin-bottom:16px;">'
+    + '<div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px;">👥 Team Members</div>'
+    + '<div style="display:flex;flex-direction:column;gap:6px;">' + empOpts + '</div>'
+    + '</div>'
+    + '<div style="display:flex;gap:8px;">'
+    + '<button onclick="saveAssignment()" style="flex:2;background:#1565c0;color:#fff;border:none;border-radius:8px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;">💾 Save</button>'
+    + '<button onclick="closeAssignModal()" style="flex:1;background:#f5f5f5;color:#555;border:none;border-radius:8px;padding:11px;font-size:12px;cursor:pointer;">Cancel</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+}
+
+function saveAssignment() {
+  var date = document.getElementById('assignDateInput').value;
+  if (!date) { showToast('Date select करें', 1500, '#c62828'); return; }
+  var team = Array.prototype.slice.call(document.querySelectorAll('[name="assignTeam"]:checked'))
+    .map(function(cb){ return { name: cb.value, role: cb.dataset.role }; });
+  gasCall('assignPlanRow', { rowNum: _assignRowNum, assignedDate: date, assignedTeam: JSON.stringify(team) }, function() {
+    closeAssignModal();
+    showToast('✅ Assignment saved!', 2000, '#2e7d32');
+    doLoadPlan();
+  });
+}
+
+function closeAssignModal() {
+  var el = document.getElementById('assignOverlay');
+  if (el) el.parentNode.removeChild(el);
+}
+
+// ── Calendar tab ──────────────────────────────────────────────
+function initCalendarSelectors() {
+  var calYear = document.getElementById('calYear');
+  if (!calYear.options.length) {
+    var cy = new Date().getFullYear();
+    for (var y = cy - 1; y <= cy + 2; y++) {
+      var o = document.createElement('option');
+      o.value = y; o.textContent = y;
+      if (y === cy) o.selected = true;
+      calYear.appendChild(o);
+    }
+  }
+  var now = new Date();
+  document.getElementById('calMonth').value = now.getMonth() + 1;
+}
+
+function loadCalendar() {
+  var month = document.getElementById('calMonth').value;
+  var year  = document.getElementById('calYear').value;
+  document.getElementById('calStatus').textContent = '⏳ Loading…';
+  document.getElementById('calWrap').innerHTML = '';
+  gasCall('getCalendar', { month: month, year: year }, function(data) {
+    var rows = data.rows || [];
+    if (!rows.length) {
+      document.getElementById('calStatus').textContent = 'No assigned activities for this month. Assign dates from Planner tab and Publish.';
+      return;
+    }
+    document.getElementById('calStatus').textContent = rows.length + ' activities scheduled';
+    renderCalendar(rows, parseInt(month,10), parseInt(year,10));
+  });
+}
+
+function renderCalendar(rows, month, year) {
+  var ACT_BG = { Field:'#e3f2fd', Demo:'#fce4ec', 'Display+Canopy':'#f3e5f5', 'Service Camp':'#e8f5e9', Showroom:'#fff3e0', 'Tractor Service-At Field':'#e0f2f1', 'Tractor Service-At Showroom':'#fbe9e7' };
+  var ACT_TX = { Field:'#0d47a1', Demo:'#880e4f', 'Display+Canopy':'#4a148c', 'Service Camp':'#1b5e20', Showroom:'#e65100', 'Tractor Service-At Field':'#004d40', 'Tractor Service-At Showroom':'#bf360c' };
+
+  // Group rows by date string (YYYY-MM-DD)
+  var byDate = {};
+  rows.forEach(function(r) {
+    var d = r.assignedDate;
+    if (!byDate[d]) byDate[d] = [];
+    byDate[d].push(r);
+  });
+
+  var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var firstDay = new Date(year, month - 1, 1).getDay();
+  var daysInMonth = new Date(year, month, 0).getDate();
+  var today = new Date();
+  var todayStr = today.getFullYear() + '-' + (today.getMonth()<9?'0':'') + (today.getMonth()+1) + '-' + (today.getDate()<10?'0':'') + today.getDate();
+
+  var html = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;">'
+    + '<thead><tr>' + days.map(function(d){ return '<th style="padding:6px 2px;text-align:center;font-size:11px;font-weight:700;color:#555;border-bottom:2px solid #e8eaf6;">' + d + '</th>'; }).join('') + '</tr></thead><tbody>';
+
+  var cell = 0, day = 1;
+  while (day <= daysInMonth) {
+    html += '<tr>';
+    for (var col = 0; col < 7; col++) {
+      if ((cell === 0 && col < firstDay) || day > daysInMonth) {
+        html += '<td style="padding:4px 2px;vertical-align:top;border:1px solid #f0f0f0;min-height:60px;"></td>';
+      } else {
+        var dStr = year + '-' + (month<10?'0':'') + month + '-' + (day<10?'0':'') + day;
+        var isToday = dStr === todayStr;
+        var cellRows = byDate[dStr] || [];
+        html += '<td style="padding:4px 3px;vertical-align:top;border:1px solid #eeeeee;background:' + (isToday?'#e8f5e9':'#fff') + ';min-height:60px;">'
+          + '<div style="font-size:12px;font-weight:' + (isToday?'900':'700') + ';color:' + (isToday?'#2e7d32':'#333') + ';margin-bottom:3px;">' + day + '</div>';
+        cellRows.forEach(function(r) {
+          var bg = ACT_BG[r.plannedActivity] || '#f5f5f5';
+          var tx = ACT_TX[r.plannedActivity] || '#333';
+          var team = (r.assignedTeam||[]).map(function(m){ return m.name; }).join(', ');
+          html += '<div style="background:' + bg + ';color:' + tx + ';border-radius:5px;padding:2px 4px;margin-bottom:2px;font-size:10px;line-height:1.4;">'
+            + '<b>' + r.village + '</b><br>'
+            + r.plannedActivity + (team ? '<br><span style="color:#666;">👤 ' + team + '</span>' : '')
+            + '</div>';
+        });
+        html += '</td>';
+        day++;
+      }
+      cell++;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  document.getElementById('calWrap').innerHTML = html;
 }
 
 // ════════════════════════════════════════════════════════════
