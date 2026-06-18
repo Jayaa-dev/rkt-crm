@@ -6136,25 +6136,49 @@ function loadRules() {
 }
 
 // ── Condition row HTML builder ───────────────────────────────
-var ACT_OPTIONS = ['Field','Demo','Display+Canopy','Service Camp','Showroom','Tractor Service-At Field','Tractor Service-At Showroom'];
+var ACT_OPTIONS    = ['Field','Demo','Display+Canopy','Service Camp','Showroom','Tractor Service-At Field','Tractor Service-At Showroom'];
+var STATUS_OPTIONS = ['Contacted','Demo Done','Hot Lead','Warm Lead','Not Interested','Converted','Lost','Service Done'];
 var OPS_MAP = { '>=': '≥ at least', '<=': '≤ at most', '=': '= exactly', '=0': '= 0 (never done)' };
 
 function conditionRowHTML(idx, cond) {
-  cond = cond || { ifActivity:'Field', operator:'>=', count:1, months:3 };
-  var actOpts = ACT_OPTIONS.map(function(a){ return '<option' + (a === cond.ifActivity ? ' selected' : '') + '>' + a + '</option>'; }).join('');
-  var opOpts  = Object.keys(OPS_MAP).map(function(k){ return '<option value="' + k + '"' + (k === cond.operator ? ' selected' : '') + '>' + OPS_MAP[k] + '</option>'; }).join('');
-  var cntOpts = [1,2,3,4,5].map(function(n){ return '<option' + (n == cond.count ? ' selected' : '') + '>' + n + '</option>'; }).join('');
-  var mnOpts  = [[1,'1 month'],[2,'2 months'],[3,'3 months'],[6,'6 months'],[12,'12 months']].map(function(m){ return '<option value="' + m[0] + '"' + (m[0] == cond.months ? ' selected' : '') + '>' + m[1] + '</option>'; }).join('');
-  var isZero  = cond.operator === '=0';
+  cond = cond || {};
+  // Backward compat: old schema used ifActivity; new schema uses fieldType + ifValue
+  var fieldType = cond.fieldType || 'activity';
+  var ifValue   = cond.ifValue   || cond.ifActivity || ACT_OPTIONS[0];
+  var operator  = cond.operator  || '>=';
+  var count     = cond.count  != null ? cond.count  : 1;
+  var months    = cond.months != null ? cond.months : 3;
+
+  var ftOpts = [['activity','Activity Type'],['status','Inquiry Status']].map(function(ft){
+    return '<option value="' + ft[0] + '"' + (ft[0] === fieldType ? ' selected' : '') + '>' + ft[1] + '</option>';
+  }).join('');
+
+  var valOptions = fieldType === 'status' ? STATUS_OPTIONS : ACT_OPTIONS;
+  var valOpts = valOptions.map(function(a){
+    return '<option' + (a === ifValue ? ' selected' : '') + '>' + a + '</option>';
+  }).join('');
+
+  var opOpts  = Object.keys(OPS_MAP).map(function(k){ return '<option value="' + k + '"' + (k === operator ? ' selected' : '') + '>' + OPS_MAP[k] + '</option>'; }).join('');
+  var cntOpts = [1,2,3,4,5].map(function(n){ return '<option' + (n == count ? ' selected' : '') + '>' + n + '</option>'; }).join('');
+  var mnOpts  = [[1,'1 month'],[2,'2 months'],[3,'3 months'],[6,'6 months'],[12,'12 months']].map(function(m){ return '<option value="' + m[0] + '"' + (m[0] == months ? ' selected' : '') + '>' + m[1] + '</option>'; }).join('');
+  var isZero  = operator === '=0';
+
   return '<div class="cond-row" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:#fff;border:1.5px solid #e8eaf6;border-radius:8px;padding:8px 10px;">'
     + '<span style="font-size:11px;font-weight:700;color:#555;white-space:nowrap;">IF</span>'
-    + '<select class="cond-activity" style="flex:1;min-width:110px;padding:6px;border:1.5px solid #c5cae9;border-radius:6px;font-size:12px;">' + actOpts + '</select>'
+    + '<select class="cond-fieldtype" onchange="updateCondValueOptions(this)" style="flex:1;min-width:100px;padding:6px;border:1.5px solid #c5cae9;border-radius:6px;font-size:12px;">' + ftOpts + '</select>'
+    + '<select class="cond-value" style="flex:1;min-width:100px;padding:6px;border:1.5px solid #c5cae9;border-radius:6px;font-size:12px;">' + valOpts + '</select>'
     + '<select class="cond-op" onchange="toggleCountVis(this)" style="flex:1;min-width:100px;padding:6px;border:1.5px solid #c5cae9;border-radius:6px;font-size:12px;">' + opOpts + '</select>'
     + '<select class="cond-count" style="width:60px;padding:6px;border:1.5px solid #c5cae9;border-radius:6px;font-size:12px;' + (isZero ? 'display:none;' : '') + '">' + cntOpts + '</select>'
     + '<span class="cond-times" style="font-size:11px;font-weight:600;color:#555;white-space:nowrap;' + (isZero ? 'display:none;' : '') + '">times in</span>'
     + '<select class="cond-months" style="width:80px;padding:6px;border:1.5px solid #c5cae9;border-radius:6px;font-size:12px;">' + mnOpts + '</select>'
     + (idx > 0 ? '<button onclick="removeCondRow(this)" style="background:#fce4ec;color:#c62828;border:none;border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;flex-shrink:0;">✕</button>' : '<span style="width:30px;"></span>')
     + '</div>';
+}
+
+function updateCondValueOptions(ftSel) {
+  var row  = ftSel.closest('.cond-row');
+  var opts = ftSel.value === 'status' ? STATUS_OPTIONS : ACT_OPTIONS;
+  row.querySelector('.cond-value').innerHTML = opts.map(function(a){ return '<option>' + a + '</option>'; }).join('');
 }
 
 function toggleCountVis(opSel) {
@@ -6188,10 +6212,11 @@ function getConditionsFromForm() {
   var conds = [];
   rows.forEach(function(row) {
     conds.push({
-      ifActivity: row.querySelector('.cond-activity').value,
-      operator:   row.querySelector('.cond-op').value,
-      count:      parseInt(row.querySelector('.cond-count').value, 10) || 0,
-      months:     parseInt(row.querySelector('.cond-months').value, 10) || 1
+      fieldType: row.querySelector('.cond-fieldtype').value,
+      ifValue:   row.querySelector('.cond-value').value,
+      operator:  row.querySelector('.cond-op').value,
+      count:     parseInt(row.querySelector('.cond-count').value, 10) || 0,
+      months:    parseInt(row.querySelector('.cond-months').value, 10) || 1
     });
   });
   return conds;
@@ -6222,8 +6247,9 @@ function renderRules() {
       var joiner = ci < r.conditions.length - 1
         ? '<span style="background:' + (r.logicOp==='AND'?'#e8eaf6':'#fff3e0') + ';color:' + (r.logicOp==='AND'?'#283593':'#e65100') + ';font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;margin:0 2px;">' + r.logicOp + '</span>'
         : '';
-      return '<span style="background:#e3f2fd;color:#0d47a1;padding:2px 8px;border-radius:6px;font-size:11px;">'
-        + c.ifActivity + ' ' + opLbl + cntTxt + ' ' + c.months + 'm'
+      var fieldLbl = (c.fieldType === 'status' ? '[Status] ' : '') + (c.ifValue || c.ifActivity || '');
+      return '<span style="background:' + (c.fieldType === 'status' ? '#fce4ec' : '#e3f2fd') + ';color:' + (c.fieldType === 'status' ? '#880e4f' : '#0d47a1') + ';padding:2px 8px;border-radius:6px;font-size:11px;">'
+        + fieldLbl + ' ' + opLbl + cntTxt + ' ' + c.months + 'm'
         + '</span>' + joiner;
     }).join(' ');
 
@@ -6256,7 +6282,9 @@ function saveRule() {
       if (r.conditions.length !== conditions.length) return false;
       return r.conditions.every(function(rc, i) {
         var nc = conditions[i];
-        return rc.ifActivity === nc.ifActivity && rc.operator === nc.operator &&
+        return (rc.ifValue || rc.ifActivity) === (nc.ifValue || nc.ifActivity) &&
+               (rc.fieldType || 'activity') === (nc.fieldType || 'activity') &&
+               rc.operator === nc.operator &&
                String(rc.count) === String(nc.count) && String(rc.months) === String(nc.months);
       });
     });
@@ -6348,7 +6376,7 @@ function doExportCSV() {
   showToast('✅ CSV downloaded!', 2000, '#2e7d32');
 }
 
-function doGeneratePlan() {
+function doGeneratePlan(force) {
   var month    = document.getElementById('planMonth').value;
   var year     = document.getElementById('planYear').value;
   var area     = document.getElementById('planArea').value;
@@ -6356,7 +6384,15 @@ function doGeneratePlan() {
   document.getElementById('planStatus').textContent = '⏳ Generating plan…';
   document.getElementById('planTableWrap').innerHTML = '';
 
-  gasCall('generatePlan', { month: month, year: year, area: area, salesman: salesman }, function(data) {
+  var params = { month: month, year: year, area: area, salesman: salesman };
+  if (force) params.force = 'true';
+
+  gasCall('generatePlan', params, function(data) {
+    if (data.requiresConfirm) {
+      document.getElementById('planStatus').textContent = '';
+      showPlanConfirmDialog(data.existingCount);
+      return;
+    }
     var n = data.rowsGenerated || 0;
     if (n === 0) {
       document.getElementById('planStatus').textContent = '⚠️ 0 activities generated — check that active rules exist and CRM has matching entries in the lookback window.';
@@ -6367,6 +6403,26 @@ function doGeneratePlan() {
   }, function(err) {
     document.getElementById('planStatus').textContent = '❌ Error: ' + (err && err.message || 'failed');
   });
+}
+
+function showPlanConfirmDialog(existingCount) {
+  var overlay = document.createElement('div');
+  overlay.id = 'planConfirmOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:14px;padding:24px 20px;max-width:320px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.25);">'
+    + '<div style="font-size:16px;font-weight:700;color:#1a237e;margin-bottom:10px;">⚡ Plan Already Exists</div>'
+    + '<div style="font-size:13px;color:#444;margin-bottom:20px;">This month already has <b>' + existingCount + '</b> planned activit' + (existingCount === 1 ? 'y' : 'ies') + '. What would you like to do?</div>'
+    + '<div style="display:flex;flex-direction:column;gap:10px;">'
+    + '<button onclick="closePlanConfirmDialog();doLoadPlan();" style="background:#e3f2fd;color:#1565c0;border:none;border-radius:8px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;">📋 Keep Old Plan</button>'
+    + '<button onclick="closePlanConfirmDialog();doGeneratePlan(true);" style="background:#7b1fa2;color:#fff;border:none;border-radius:8px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Remove & Regenerate</button>'
+    + '<button onclick="closePlanConfirmDialog();" style="background:#f5f5f5;color:#666;border:none;border-radius:8px;padding:10px;font-size:12px;cursor:pointer;">Cancel</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+}
+
+function closePlanConfirmDialog() {
+  var el = document.getElementById('planConfirmOverlay');
+  if (el) el.parentNode.removeChild(el);
 }
 
 function doLoadPlan() {
