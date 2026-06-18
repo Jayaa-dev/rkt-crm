@@ -247,7 +247,7 @@
 
   // ── gasCall() — replaces all google.script.run calls ──────
   function gasCall(action, params, onSuccess, onFailure) {
-    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride','saveDelivery','saveVillage','saveRule','deleteRule','generatePlan','updatePlanStatus','saveEmployee','deleteEmployee','sendReminders','assignPlanRow','publishPlan','saveChosenActivity'].indexOf(action) !== -1;
+    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride','saveDelivery','saveVillage','saveRule','deleteRule','generatePlan','updatePlanStatus','saveEmployee','deleteEmployee','sendReminders','assignPlanRow','publishPlan','saveChosenActivity','syncTeamFromCRM'].indexOf(action) !== -1;
     var promise;
     if (isWrite) {
       // POST for write operations (image uploads etc.)
@@ -2573,6 +2573,14 @@
             📢 Send Now to All
           </button>
           <div id="reminderStatus" style="margin-top:8px;font-size:13px;text-align:center;"></div>
+        </div>
+
+        <!-- Sync from CRM -->
+        <div class="card" style="background:#f3e5f5;border:1.5px solid #ce93d8;">
+          <div class="card-title" style="color:#6a1b9a;">🔄 Sync Names from Work Sheet</div>
+          <div style="font-size:12px;color:#4a148c;margin-bottom:10px;line-height:1.6;">Work sheet के Salesman column से सभी unique names automatically EmployeeMaster में add हो जायेंगे। Phone और अन्य details बाद में manually भरें।</div>
+          <button onclick="doSyncTeam()" style="width:100%;background:#7b1fa2;color:#fff;border:none;border-radius:8px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Sync Names Now</button>
+          <div id="syncStatus" style="margin-top:8px;font-size:12px;text-align:center;color:#4a148c;"></div>
         </div>
 
         <!-- Add / Edit Employee -->
@@ -6541,8 +6549,7 @@ function renderPlanTable(rows) {
       + '👤 ' + salesman + ' <span style="font-size:11px;color:#555;font-weight:400;">(' + sDone + '/' + sRows.length + ' done)</span></div>'
       + '<table style="width:100%;border-collapse:collapse;font-size:12px;border:1.5px solid #c5cae9;border-top:none;">'
       + '<thead><tr style="background:#f5f7ff;">'
-      + '<th style="padding:7px 8px;text-align:left;color:#555;font-weight:700;">Village</th>'
-      + '<th style="padding:7px 8px;text-align:left;color:#555;font-weight:700;">Area</th>'
+      + '<th style="padding:7px 8px;text-align:left;color:#555;font-weight:700;">Village & Stats</th>'
       + '<th style="padding:7px 8px;text-align:left;color:#555;font-weight:700;">Activity</th>'
       + '<th style="padding:7px 8px;text-align:left;color:#555;font-weight:700;">📅 Date</th>'
       + '<th style="padding:7px 8px;text-align:left;color:#555;font-weight:700;">👥 Team</th>'
@@ -6554,24 +6561,44 @@ function renderPlanTable(rows) {
       var c    = ACT_COLORS[r.plannedActivity] || { bg:'#f5f5f5', color:'#333' };
       var ico  = ACT_ICONS[r.plannedActivity]  || '•';
       var sc   = STATUS_COLORS[r.status]        || '#888';
-      var team = (r.assignedTeam||[]).map(function(m){ return m.name; }).join(', ') || '—';
-      var dateStr = r.assignedDate ? r.assignedDate.substring(8,10) + '/' + r.assignedDate.substring(5,7) : '—';
+
+      // Village + stats cell
+      var stats     = r.activityStats || {};
+      var statsKeys = Object.keys(stats);
+      var statsHtml = statsKeys.length
+        ? statsKeys.map(function(a){ return '<span style="background:#f5f5f5;border-radius:4px;padding:1px 5px;font-size:10px;color:#555;">' + a.substring(0,5) + ':' + stats[a] + '</span>'; }).join(' ')
+        : '<span style="font-size:10px;color:#bbb;">No CRM history</span>';
+      var masterBadge = r.inMaster
+        ? '<span style="color:#2e7d32;font-size:10px;font-weight:700;">✅ Master</span>'
+        : '<span style="color:#c62828;font-size:10px;font-weight:700;">❌ Not in Master</span>';
+      var areaChip = '<span style="background:' + (r.area==='Phagi'?'#e8f5e9':'#e3f2fd') + ';color:' + (r.area==='Phagi'?'#1b5e20':'#0d47a1') + ';padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;">' + (r.area||'?') + '</span>';
+      var villageCell = '<div style="font-weight:700;font-size:12px;">' + r.village + ' ' + areaChip + '</div>'
+        + '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:3px;">' + statsHtml + '</div>'
+        + '<div style="margin-top:2px;">' + masterBadge + '</div>';
+
+      // Activity cell
       var actCell = isMulti
         ? '<select onchange="saveChosenActivity(' + r.rowNum + ',this.value)" style="font-size:11px;font-weight:700;color:#7b1fa2;background:#f3e5f5;border:1.5px solid #ce93d8;border-radius:6px;padding:4px 6px;cursor:pointer;">'
           + '<option value="">⚠️ Select Activity</option>'
           + r.plannedActivity.split('|').map(function(a){ return '<option value="' + a.trim() + '">' + a.trim() + '</option>'; }).join('')
           + '</select>'
         : '<span style="background:' + c.bg + ';color:' + c.color + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">' + ico + ' ' + r.plannedActivity + '</span>';
+
+      // Inline date input
+      var dateCell = '<input type="date" value="' + (r.assignedDate||'') + '" onchange="saveDate(' + r.rowNum + ',this.value)" style="font-size:11px;border:1.5px solid #c5cae9;border-radius:6px;padding:3px 5px;width:110px;cursor:pointer;">';
+
+      // Inline team cell
+      var teamNames = (r.assignedTeam||[]).map(function(m){ return m.name; }).join(', ');
+      var teamCell  = '<div style="display:flex;flex-direction:column;gap:3px;">'
+        + (teamNames ? '<span style="font-size:10px;color:#333;">' + teamNames + '</span>' : '<span style="font-size:10px;color:#bbb;">Not assigned</span>')
+        + '<button onclick="openAssignModal(' + r.rowNum + ')" style="background:#e3f2fd;color:#1565c0;border:none;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;width:fit-content;">👥 ' + (teamNames ? 'Edit' : 'Assign') + '</button>'
+        + '</div>';
+
       html += '<tr style="background:' + (isMulti ? '#fdf6ff' : (i%2===0?'#fff':'#fafbff')) + ';">'
-        + '<td style="padding:6px 8px;font-weight:600;">' + r.village + '</td>'
-        + '<td style="padding:6px 8px;"><span style="background:' + (r.area==='Phagi'?'#e8f5e9':'#e3f2fd') + ';color:' + (r.area==='Phagi'?'#1b5e20':'#0d47a1') + ';padding:2px 6px;border-radius:10px;font-size:11px;font-weight:700;">' + (r.area||'?') + '</span></td>'
+        + '<td style="padding:6px 8px;">' + villageCell + '</td>'
         + '<td style="padding:6px 8px;">' + actCell + '</td>'
-        + '<td style="padding:6px 8px;font-size:11px;color:#555;">' + dateStr + '</td>'
-        + '<td style="padding:6px 8px;font-size:11px;">'
-        + '<div style="display:flex;flex-direction:column;gap:3px;">'
-        + '<span style="color:#444;">' + team + '</span>'
-        + '<button onclick="openAssignModal(' + r.rowNum + ')" style="background:#e3f2fd;color:#1565c0;border:none;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;width:fit-content;">📌 Assign</button>'
-        + '</div></td>'
+        + '<td style="padding:6px 8px;">' + dateCell + '</td>'
+        + '<td style="padding:6px 8px;">' + teamCell + '</td>'
         + '<td style="padding:6px 8px;">'
         + '<select onchange="updateStatus(' + r.rowNum + ', this.value)" style="font-size:11px;font-weight:700;color:' + sc + ';background:#fff;border:1.5px solid #e0e0e0;border-radius:6px;padding:3px 6px;cursor:pointer;">'
         + ['Pending','Done','Skipped'].map(function(s){ return '<option' + (r.status===s?' selected':'') + '>' + s + '</option>'; }).join('')
@@ -6587,6 +6614,12 @@ function renderPlanTable(rows) {
 function updateStatus(rowNum, status) {
   gasCall('updatePlanStatus', { rowNum: rowNum, status: status }, function() {
     showToast('✅ Status updated', 1500, '#2e7d32');
+  });
+}
+
+function saveDate(rowNum, date) {
+  gasCall('assignPlanRow', { rowNum: rowNum, assignedDate: date }, function() {
+    showToast('📅 Date saved', 1200, '#1565c0');
   });
 }
 
@@ -6646,30 +6679,23 @@ function openAssignModal(rowNum) {
   overlay.id = 'assignOverlay';
   overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding-top:60px;';
   overlay.innerHTML = '<div style="background:#fff;border-radius:14px;padding:20px;max-width:340px;width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.25);">'
-    + '<div style="font-size:15px;font-weight:700;color:#1a237e;margin-bottom:14px;">📌 Assign Activity</div>'
-    + '<div style="margin-bottom:12px;">'
-    + '<label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px;">📅 Date</label>'
-    + '<input type="date" id="assignDateInput" min="' + year + '-' + (month<10?'0':'') + month + '-01" style="width:100%;box-sizing:border-box;padding:8px;border:1.5px solid #c5cae9;border-radius:7px;font-size:13px;">'
-    + '</div>'
-    + '<div style="margin-bottom:16px;">'
-    + '<div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px;">👥 Team Members</div>'
-    + '<div style="display:flex;flex-direction:column;gap:6px;">' + empOpts + '</div>'
-    + '</div>'
+    + '<div style="font-size:15px;font-weight:700;color:#1a237e;margin-bottom:4px;">👥 Assign Team</div>'
+    + '<div style="font-size:11px;color:#888;margin-bottom:14px;">Select one or more team members for this activity</div>'
+    + '<div style="margin-bottom:16px;display:flex;flex-direction:column;gap:6px;">' + empOpts + '</div>'
     + '<div style="display:flex;gap:8px;">'
-    + '<button onclick="saveAssignment()" style="flex:2;background:#1565c0;color:#fff;border:none;border-radius:8px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;">💾 Save</button>'
+    + '<button onclick="saveAssignment()" style="flex:2;background:#1565c0;color:#fff;border:none;border-radius:8px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;">💾 Save Team</button>'
     + '<button onclick="closeAssignModal()" style="flex:1;background:#f5f5f5;color:#555;border:none;border-radius:8px;padding:11px;font-size:12px;cursor:pointer;">Cancel</button>'
     + '</div></div>';
   document.body.appendChild(overlay);
 }
 
 function saveAssignment() {
-  var date = document.getElementById('assignDateInput').value;
-  if (!date) { showToast('Date select करें', 1500, '#c62828'); return; }
   var team = Array.prototype.slice.call(document.querySelectorAll('[name="assignTeam"]:checked'))
     .map(function(cb){ return { name: cb.value, role: cb.dataset.role }; });
-  gasCall('assignPlanRow', { rowNum: _assignRowNum, assignedDate: date, assignedTeam: JSON.stringify(team) }, function() {
+  if (!team.length) { showToast('कम से कम 1 team member select करें', 1500, '#c62828'); return; }
+  gasCall('assignPlanRow', { rowNum: _assignRowNum, assignedTeam: JSON.stringify(team) }, function() {
     closeAssignModal();
-    showToast('✅ Assignment saved!', 2000, '#2e7d32');
+    showToast('✅ Team assigned!', 2000, '#2e7d32');
     doLoadPlan();
   });
 }
@@ -6782,6 +6808,19 @@ function unlockEmployees() {
     document.getElementById('empPwd').placeholder = '❌ Wrong password';
     setTimeout(function(){ document.getElementById('empPwd').placeholder = 'Password'; }, 1500);
   }
+}
+
+function doSyncTeam() {
+  document.getElementById('syncStatus').textContent = '⏳ Syncing…';
+  gasCall('syncTeamFromCRM', {}, function(data) {
+    var msg = data.added > 0
+      ? '✅ ' + data.added + ' new member' + (data.added > 1 ? 's' : '') + ' added: ' + data.names.join(', ')
+      : '✅ Already up to date — no new names found';
+    document.getElementById('syncStatus').textContent = msg;
+    loadEmployees();
+  }, function() {
+    document.getElementById('syncStatus').textContent = '❌ Sync failed';
+  });
 }
 
 function loadEmployees() {
