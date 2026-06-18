@@ -6016,6 +6016,13 @@ function plannerOnOpen() {
   addRuleCondition(); // seed one blank condition row in rule builder
   loadVillages();
   loadRules();
+  loadInquiryStatuses();
+}
+
+function loadInquiryStatuses() {
+  gasCall('getInquiryStatuses', {}, function(data) {
+    STATUS_OPTIONS = data.statuses || [];
+  });
 }
 
 // ── Sub-tab switching ─────────────────────────────────────────
@@ -6137,7 +6144,7 @@ function loadRules() {
 
 // ── Condition row HTML builder ───────────────────────────────
 var ACT_OPTIONS    = ['Field','Demo','Display+Canopy','Service Camp','Showroom','Tractor Service-At Field','Tractor Service-At Showroom'];
-var STATUS_OPTIONS = ['Contacted','Demo Done','Hot Lead','Warm Lead','Not Interested','Converted','Lost','Service Done'];
+var STATUS_OPTIONS = [];  // loaded dynamically from Work sheet col J
 var OPS_MAP = { '>=': '≥ at least', '<=': '≤ at most', '=': '= exactly', '=0': '= 0 (never done)' };
 
 function conditionRowHTML(idx, cond) {
