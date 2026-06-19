@@ -2767,10 +2767,11 @@
           <span id="vmCount" style="font-size:12px;color:#888;white-space:nowrap;"></span>
         </div>
 
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:12px;" id="vmTable">
+        <!-- Village table view -->
+        <div id="vmTableWrap" style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead>
-              <tr style="background:#fbe9e7;position:sticky;top:0;">
+              <tr style="background:#fbe9e7;">
                 <th style="padding:8px 10px;text-align:left;font-weight:700;">#</th>
                 <th style="padding:8px 10px;text-align:left;font-weight:700;">Village</th>
                 <th style="padding:8px 10px;text-align:left;font-weight:700;">Area</th>
@@ -2781,6 +2782,8 @@
             <tbody id="vmBody"></tbody>
           </table>
         </div>
+        <!-- Salesman grouped view -->
+        <div id="vmSalesmanView" style="display:none;"></div>
         <div id="vmStatus" style="font-size:12px;color:#888;margin-top:8px;text-align:center;"></div>
       </div>
     </div>
@@ -7004,9 +7007,10 @@ function vmRender() {
 
   if (vmView === 'salesman') { vmRenderBySalesman(rows); return; }
 
+  document.getElementById('vmTableWrap').style.display = '';
+  document.getElementById('vmSalesmanView').style.display = 'none';
+  document.getElementById('vmSalesmanView').innerHTML = '';
   var empOpts = document.getElementById('vmNewSalesman').innerHTML;
-  var tbl = document.getElementById('vmTable');
-  tbl.style.display = '';
   var html = rows.map(function(v, i) {
     return '<tr style="background:' + (i%2===0?'#fff':'#fff8f5') + ';border-bottom:1px solid #f0f0f0;">'
       + '<td style="padding:6px 10px;color:#aaa;font-size:11px;">' + (i+1) + '</td>'
@@ -7037,7 +7041,10 @@ function vmRender() {
 }
 
 function vmRenderBySalesman(rows) {
-  document.getElementById('vmTable').style.display = 'none';
+  document.getElementById('vmTableWrap').style.display = 'none';
+  document.getElementById('vmBody').innerHTML = '';
+  var container = document.getElementById('vmSalesmanView');
+  container.style.display = '';
   // Group by salesman
   var groups = {};
   rows.forEach(function(v) {
@@ -7072,7 +7079,7 @@ function vmRenderBySalesman(rows) {
     html += '</div></div>';
   });
   html += '</div>';
-  document.getElementById('vmBody').innerHTML = html;
+  container.innerHTML = html;
 }
 
 function vmSave(rowNum, originalVillage) {
