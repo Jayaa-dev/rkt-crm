@@ -2752,15 +2752,19 @@
           <button onclick="vmAddVillage()" style="background:#e65100;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">+ Add</button>
         </div>
 
-        <!-- Search -->
-        <div style="display:flex;gap:8px;margin-bottom:8px;">
-          <input id="vmSearch" type="text" placeholder="🔍 Search village…" oninput="vmRender()"
-            style="flex:1;padding:7px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:13px;">
+        <!-- View toggle + Search -->
+        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
+          <div style="display:flex;border:1.5px solid #e0e0e0;border-radius:8px;overflow:hidden;">
+            <button id="vmToggleVillage" onclick="vmSetView('village')" style="padding:6px 12px;font-size:12px;font-weight:700;border:none;cursor:pointer;background:#e65100;color:#fff;">🏘️ By Village</button>
+            <button id="vmToggleSalesman" onclick="vmSetView('salesman')" style="padding:6px 12px;font-size:12px;font-weight:700;border:none;cursor:pointer;background:#fff;color:#555;">👤 By Salesman</button>
+          </div>
+          <input id="vmSearch" type="text" placeholder="🔍 Search…" oninput="vmRender()"
+            style="flex:1;min-width:120px;padding:7px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:13px;">
           <select id="vmAreaFilter" onchange="vmRender()" style="padding:7px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:13px;">
             <option value="All">All Areas</option>
             <option>Phagi</option><option>Dudu</option>
           </select>
-          <span id="vmCount" style="font-size:12px;color:#888;align-self:center;white-space:nowrap;"></span>
+          <span id="vmCount" style="font-size:12px;color:#888;white-space:nowrap;"></span>
         </div>
 
         <div style="overflow-x:auto;">
@@ -6950,6 +6954,16 @@ function unlockEmployees() {
 // ════════════════════════════════════════════════════════════
 // ── Village Master CRUD ──────────────────────────────────────
 var vmData = [];
+var vmView = 'village'; // 'village' | 'salesman'
+
+function vmSetView(v) {
+  vmView = v;
+  document.getElementById('vmToggleVillage').style.background  = v === 'village'  ? '#e65100' : '#fff';
+  document.getElementById('vmToggleVillage').style.color       = v === 'village'  ? '#fff'    : '#555';
+  document.getElementById('vmToggleSalesman').style.background = v === 'salesman' ? '#e65100' : '#fff';
+  document.getElementById('vmToggleSalesman').style.color      = v === 'salesman' ? '#fff'    : '#555';
+  vmRender();
+}
 
 function openVillageMasterCRUD() {
   document.getElementById('villageMasterModal').style.display = 'block';
@@ -6983,15 +6997,18 @@ function vmRender() {
   var area   = document.getElementById('vmAreaFilter').value;
   var rows   = vmData.filter(function(v) {
     if (area !== 'All' && v.area !== area) return false;
-    if (search && v.village.toLowerCase().indexOf(search) === -1) return false;
+    if (search && v.village.toLowerCase().indexOf(search) === -1 && (v.salesman||'').toLowerCase().indexOf(search) === -1) return false;
     return true;
   });
   document.getElementById('vmCount').textContent = rows.length + ' / ' + vmData.length + ' villages';
 
-  var empOpts = document.getElementById('vmNewSalesman').innerHTML;
+  if (vmView === 'salesman') { vmRenderBySalesman(rows); return; }
 
+  var empOpts = document.getElementById('vmNewSalesman').innerHTML;
+  var tbl = document.getElementById('vmTable');
+  tbl.style.display = '';
   var html = rows.map(function(v, i) {
-    return '<tr style="background:' + (i%2===0?'#fff':'#fff8f5') + ';border-bottom:1px solid #f0f0f0;" id="vmRow_'+v.rowNum+'">'
+    return '<tr style="background:' + (i%2===0?'#fff':'#fff8f5') + ';border-bottom:1px solid #f0f0f0;">'
       + '<td style="padding:6px 10px;color:#aaa;font-size:11px;">' + (i+1) + '</td>'
       + '<td style="padding:6px 10px;">'
         + '<input id="vmV_'+v.rowNum+'" value="'+escHtml(v.village)+'" style="width:100%;border:1px solid #e0e0e0;border-radius:6px;padding:5px 7px;font-size:12px;font-weight:700;">'
@@ -7005,7 +7022,7 @@ function vmRender() {
       + '</td>'
       + '<td style="padding:6px 10px;">'
         + '<select id="vmS_'+v.rowNum+'" style="width:100%;border:1px solid #e0e0e0;border-radius:6px;padding:5px 7px;font-size:12px;">'
-        + empOpts.replace('value="'+v.salesman+'"', 'value="'+v.salesman+'" selected')
+        + empOpts.replace('value="'+escHtml(v.salesman)+'"', 'value="'+escHtml(v.salesman)+'" selected')
         + '</select>'
       + '</td>'
       + '<td style="padding:6px 10px;text-align:center;white-space:nowrap;">'
@@ -7017,6 +7034,45 @@ function vmRender() {
       + '</tr>';
   }).join('');
   document.getElementById('vmBody').innerHTML = html || '<tr><td colspan="5" style="text-align:center;color:#aaa;padding:20px;">No villages found</td></tr>';
+}
+
+function vmRenderBySalesman(rows) {
+  document.getElementById('vmTable').style.display = 'none';
+  // Group by salesman
+  var groups = {};
+  rows.forEach(function(v) {
+    var sm = v.salesman || '— Unassigned —';
+    if (!groups[sm]) groups[sm] = [];
+    groups[sm].push(v);
+  });
+  var empOpts = document.getElementById('vmNewSalesman').innerHTML;
+  var colors = ['#e3f2fd','#f3e5f5','#e8f5e9','#fff3e0','#fce4ec','#e0f7fa','#f9fbe7'];
+  var html = '<div style="display:flex;flex-direction:column;gap:12px;">';
+  var ci = 0;
+  Object.keys(groups).sort().forEach(function(sm) {
+    var vils = groups[sm];
+    var bg = sm === '— Unassigned —' ? '#fafafa' : colors[ci++ % colors.length];
+    html += '<div style="border-radius:10px;border:1.5px solid #e0e0e0;overflow:hidden;">'
+      + '<div style="background:'+bg+';padding:10px 14px;display:flex;align-items:center;gap:10px;">'
+      + '<span style="font-size:14px;">👤</span>'
+      + '<span style="font-weight:800;font-size:13px;flex:1;">' + escHtml(sm) + '</span>'
+      + '<span style="background:#fff;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700;color:#555;">'
+        + vils.length + ' village' + (vils.length !== 1 ? 's' : '') + '</span>'
+      + '</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;">';
+    vils.forEach(function(v) {
+      html += '<div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:6px 10px;min-width:140px;flex:1;max-width:200px;">'
+        + '<div style="font-weight:700;font-size:12px;margin-bottom:4px;">'+escHtml(v.village)+'</div>'
+        + '<div style="font-size:11px;color:#888;margin-bottom:6px;">'+escHtml(v.area||'—')+'</div>'
+        + '<select onchange="vmQuickAssign('+v.rowNum+',\''+escHtml(v.village)+'\',this.value)" style="width:100%;border:1px solid #ddd;border-radius:5px;padding:3px 5px;font-size:11px;">'
+        + empOpts.replace('value="'+escHtml(v.salesman)+'"', 'value="'+escHtml(v.salesman)+'" selected')
+        + '</select>'
+        + '</div>';
+    });
+    html += '</div></div>';
+  });
+  html += '</div>';
+  document.getElementById('vmBody').innerHTML = html;
 }
 
 function vmSave(rowNum, originalVillage) {
@@ -7034,6 +7090,17 @@ function vmSave(rowNum, originalVillage) {
     // Reload to get fresh rowNums after any appends
     if (rowNum < 0) vmLoad();
   }, function() { showToast('❌ Save failed', 1500, '#c62828'); });
+}
+
+function vmQuickAssign(rowNum, village, salesman) {
+  var v = null;
+  for (var i = 0; i < vmData.length; i++) { if (vmData[i].rowNum === rowNum) { v = vmData[i]; break; } }
+  if (!v) return;
+  gasCall('saveVillage', { village: village, area: v.area, salesman: salesman }, function() {
+    v.salesman = salesman;
+    showToast('✅ ' + village + ' → ' + (salesman || 'Unassigned'), 1400, '#2e7d32');
+    vmRender();
+  }, function() { showToast('❌ Failed', 1400, '#c62828'); });
 }
 
 function vmDelete(rowNum, villageName) {
