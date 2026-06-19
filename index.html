@@ -2713,6 +2713,7 @@
               style="flex:2;min-width:130px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
             <button onclick="loadVillageStats()" style="background:#1565c0;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">🔄 Refresh</button>
             <button onclick="addNewVillageToMaster()" style="background:#2e7d32;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">+ Add Village</button>
+            <button onclick="showMasterStats()" style="background:#6a1b9a;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">📊 Master Stats</button>
           </div>
         </div>
 
@@ -2720,6 +2721,16 @@
         <div id="vsWrap" style="overflow-x:auto;"></div>
       </div>
     </div><!-- /section-villagestats -->
+
+    <!-- Master Stats Modal -->
+    <div id="masterStatsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;overflow-y:auto;padding:20px;">
+      <div style="background:#fff;border-radius:14px;max-width:760px;margin:0 auto;padding:20px 18px;position:relative;">
+        <button onclick="document.getElementById('masterStatsModal').style.display='none'"
+          style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:20px;cursor:pointer;color:#888;">✕</button>
+        <h3 style="margin:0 0 14px;font-size:16px;color:#4a148c;">📊 Master Village Stats</h3>
+        <div id="masterStatsBody"></div>
+      </div>
+    </div>
 
     <!-- ════════════════════════════════════════════════════ -->
     <!--  SERVICE REPORT                                      -->
@@ -6878,6 +6889,107 @@ function unlockEmployees() {
 // ════════════════════════════════════════════════════════════
 // VILLAGE STATS TAB
 // ════════════════════════════════════════════════════════════
+function showMasterStats() {
+  if (!vsAllData.length) { showToast('Load village data first', 1500, '#e65100'); return; }
+  var modal = document.getElementById('masterStatsModal');
+  var body  = document.getElementById('masterStatsBody');
+  modal.style.display = 'block';
+
+  // Pull cached data (stored on last load)
+  var monthly  = window._vsMonthlyStat  || [];
+  var actTotal = window._vsActTotal     || {};
+  var salesman = window._vsSalesmanStat || [];
+  var inMaster = window._vsInMaster     || 0;
+
+  var html = '';
+
+  // ── Month-wise coverage ──────────────────────────────────────
+  html += '<div style="font-weight:700;color:#1565c0;margin-bottom:6px;font-size:13px;">📅 Month-wise Master Village Coverage</div>';
+  if (!monthly.length) {
+    html += '<p style="color:#888;font-size:12px;">No CRM data for master villages yet.</p>';
+  } else {
+    html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">'
+      + '<thead><tr style="background:#e8eaf6;">'
+      + '<th style="padding:7px 10px;text-align:left;">Month</th>'
+      + '<th style="padding:7px 10px;text-align:center;">Covered</th>'
+      + '<th style="padding:7px 10px;text-align:center;">of Master</th>'
+      + '<th style="padding:7px 10px;text-align:center;">Coverage %</th>'
+      + '<th style="padding:7px 10px;text-align:center;">Total Visits</th>'
+      + '<th style="padding:7px 10px;text-align:left;">Top Activity</th>'
+      + '<th style="padding:7px 10px;text-align:left;">Top Salesman</th>'
+      + '</tr></thead><tbody>';
+    monthly.forEach(function(m, i) {
+      var pct = inMaster > 0 ? Math.round(m.coveredCount / inMaster * 100) : 0;
+      var barW = Math.max(4, pct);
+      var topAct = Object.keys(m.activities).sort(function(a,b){ return m.activities[b]-m.activities[a]; })[0] || '—';
+      var topSm  = Object.keys(m.salesman ).sort(function(a,b){ return m.salesman[b] -m.salesman[a];  })[0] || '—';
+      var parts  = m.month.split('-');
+      var label  = parts[1] ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(parts[1],10)-1] + ' ' + parts[0] : m.month;
+      html += '<tr style="background:' + (i%2===0?'#fff':'#f8f9ff') + ';border-bottom:1px solid #eee;">'
+        + '<td style="padding:6px 10px;font-weight:700;">' + label + '</td>'
+        + '<td style="padding:6px 10px;text-align:center;font-weight:700;color:#1b5e20;">' + m.coveredCount + '</td>'
+        + '<td style="padding:6px 10px;text-align:center;color:#555;">' + inMaster + '</td>'
+        + '<td style="padding:6px 10px;text-align:center;">'
+          + '<div style="background:#e8f5e9;border-radius:8px;overflow:hidden;height:16px;width:80px;display:inline-block;vertical-align:middle;">'
+          + '<div style="background:#2e7d32;height:100%;width:'+barW+'%;"></div></div>'
+          + ' <span style="font-weight:700;color:'+(pct>=80?'#2e7d32':pct>=50?'#f57f17':'#c62828')+';">'+pct+'%</span></td>'
+        + '<td style="padding:6px 10px;text-align:center;color:#6a1b9a;font-weight:700;">' + m.total + '</td>'
+        + '<td style="padding:6px 10px;color:#0d47a1;">' + topAct + '</td>'
+        + '<td style="padding:6px 10px;color:#333;">' + topSm + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // ── Activity breakdown ───────────────────────────────────────
+  html += '<div style="font-weight:700;color:#1565c0;margin:8px 0 6px;font-size:13px;">⚡ Activity Breakdown (Master Villages)</div>';
+  var actKeys = Object.keys(actTotal).sort(function(a,b){ return actTotal[b]-actTotal[a]; });
+  if (!actKeys.length) {
+    html += '<p style="color:#888;font-size:12px;">No activity data.</p>';
+  } else {
+    var actMax = actTotal[actKeys[0]] || 1;
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">';
+    actKeys.forEach(function(a) {
+      var pct = Math.round(actTotal[a]/actMax*100);
+      html += '<div style="background:#e3f2fd;border-radius:10px;padding:8px 12px;min-width:120px;flex:1;">'
+        + '<div style="font-size:11px;font-weight:700;color:#0d47a1;margin-bottom:4px;">' + a + '</div>'
+        + '<div style="font-size:18px;font-weight:800;color:#1565c0;">' + actTotal[a] + '</div>'
+        + '<div style="background:#bbdefb;border-radius:4px;height:4px;margin-top:4px;">'
+        + '<div style="background:#1565c0;height:100%;width:'+pct+'%;border-radius:4px;"></div></div>'
+        + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // ── Salesman breakdown ───────────────────────────────────────
+  html += '<div style="font-weight:700;color:#1565c0;margin-bottom:6px;font-size:13px;">👤 Salesman Coverage (Master Villages)</div>';
+  if (!salesman.length) {
+    html += '<p style="color:#888;font-size:12px;">No salesman data.</p>';
+  } else {
+    html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+      + '<thead><tr style="background:#f3e5f5;">'
+      + '<th style="padding:7px 10px;text-align:left;">Salesman</th>'
+      + '<th style="padding:7px 10px;text-align:center;">Villages Covered</th>'
+      + '<th style="padding:7px 10px;text-align:center;">of Master</th>'
+      + '<th style="padding:7px 10px;text-align:center;">Coverage %</th>'
+      + '<th style="padding:7px 10px;text-align:center;">Total Visits</th>'
+      + '</tr></thead><tbody>';
+    salesman.forEach(function(s, i) {
+      var pct = inMaster > 0 ? Math.round(s.coveredCount / inMaster * 100) : 0;
+      html += '<tr style="background:' + (i%2===0?'#fff':'#fce4ec') + ';border-bottom:1px solid #eee;">'
+        + '<td style="padding:6px 10px;font-weight:700;">' + s.name + '</td>'
+        + '<td style="padding:6px 10px;text-align:center;font-weight:700;color:#4a148c;">' + s.coveredCount + '</td>'
+        + '<td style="padding:6px 10px;text-align:center;color:#555;">' + inMaster + '</td>'
+        + '<td style="padding:6px 10px;text-align:center;font-weight:700;color:'+(pct>=80?'#2e7d32':pct>=50?'#f57f17':'#c62828')+';">' + pct + '%</td>'
+        + '<td style="padding:6px 10px;text-align:center;color:#1565c0;">' + s.visits + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  body.innerHTML = html;
+}
+
 function addToMaster(village, area, salesman) {
   var areaVal = area || prompt('Area for ' + village + '?', '');
   if (areaVal === null) return;
@@ -6923,6 +7035,10 @@ function loadVillageStats() {
   document.getElementById('vsSummary').innerHTML = '';
   gasCall('getVillageMasterStats', {}, function(data) {
     vsAllData = data.villages || [];
+    window._vsMonthlyStat  = data.monthly  || [];
+    window._vsActTotal     = data.actTotal  || {};
+    window._vsSalesmanStat = data.salesman  || [];
+    window._vsInMaster     = (data.summary || {}).inMaster || 0;
     var s = data.summary || {};
     // Summary cards
     var cards = [
