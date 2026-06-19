@@ -1306,6 +1306,9 @@
     <button id="tab-calendar" class="tab-btn"          onclick="showTab('calendar')">
       <span class="tab-icon">🗓️</span>Calendar
     </button>
+    <button id="tab-villagestats" class="tab-btn"     onclick="showTab('villagestats')">
+      <span class="tab-icon">🗺️</span>Villages
+    </button>
   </div>
 
   <!-- ── SCROLLABLE AREA ─────────────────────────────────── -->
@@ -2671,6 +2674,53 @@
     </div><!-- /section-calendar -->
 
     <!-- ════════════════════════════════════════════════════ -->
+    <!--  VILLAGE STATS (password protected)                  -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <div id="section-villagestats" class="section">
+
+      <!-- Lock Screen -->
+      <div id="vsLockScreen" style="padding:40px 20px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:12px;">🗺️</div>
+        <div style="font-size:18px;font-weight:700;color:#1565c0;margin-bottom:6px;">Village Stats</div>
+        <div style="font-size:13px;color:#777;margin-bottom:20px;">Admin access required</div>
+        <input type="password" id="vsPwd" placeholder="Password"
+          style="padding:10px 16px;border:1.5px solid #c5cae9;border-radius:8px;font-size:15px;width:200px;text-align:center;display:block;margin:0 auto 12px;"
+          onkeydown="if(event.key==='Enter')unlockVillageStats()">
+        <button onclick="unlockVillageStats()"
+          style="background:#1565c0;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:15px;font-weight:700;cursor:pointer;">Unlock</button>
+      </div>
+
+      <!-- Content -->
+      <div id="vsContent" style="display:none;padding:12px;">
+
+        <!-- Summary cards -->
+        <div id="vsSummary" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+
+        <!-- Filters -->
+        <div class="card" style="padding:10px 12px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <select id="vsFilterArea" onchange="renderVillageStats()" style="flex:1;min-width:100px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
+              <option value="All">All Areas</option>
+              <option value="Phagi">Phagi</option>
+              <option value="Dudu">Dudu</option>
+            </select>
+            <select id="vsFilterMaster" onchange="renderVillageStats()" style="flex:1;min-width:120px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
+              <option value="All">All Villages</option>
+              <option value="Y">In Master Only</option>
+              <option value="N">Not in Master</option>
+            </select>
+            <input id="vsSearch" type="text" placeholder="🔍 Search village…" oninput="renderVillageStats()"
+              style="flex:2;min-width:130px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
+            <button onclick="loadVillageStats()" style="background:#1565c0;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">🔄 Refresh</button>
+          </div>
+        </div>
+
+        <div id="vsStatus" style="font-size:12px;color:#888;margin:4px 0 8px;"></div>
+        <div id="vsWrap" style="overflow-x:auto;"></div>
+      </div>
+    </div><!-- /section-villagestats -->
+
+    <!-- ════════════════════════════════════════════════════ -->
     <!--  SERVICE REPORT                                      -->
     <!-- ════════════════════════════════════════════════════ -->
 
@@ -3101,11 +3151,23 @@ window.onload = function() {
 // TABS
 // ════════════════════════════════════════════════════════════
 function showTab(tab) {
-  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap","report","target","delivery","planner","employees","calendar"].forEach(function(t) {
+  ["daily","search","attendance","petrol","dashboard","service","bills","fieldmap","report","target","delivery","planner","employees","calendar","villagestats"].forEach(function(t) {
     document.getElementById("section-" + t).classList.toggle("active", t === tab);
     document.getElementById("tab-" + t).classList.toggle("active", t === tab);
   });
   if (tab === "calendar") { initCalendarSelectors(); loadCalendar(); return; }
+  if (tab === "villagestats") {
+    if (vsUnlocked) {
+      document.getElementById('vsLockScreen').style.display = 'none';
+      document.getElementById('vsContent').style.display    = 'block';
+      loadVillageStats();
+    } else {
+      document.getElementById('vsLockScreen').style.display = 'block';
+      document.getElementById('vsContent').style.display    = 'none';
+      setTimeout(function(){ document.getElementById('vsPwd').focus(); }, 300);
+    }
+    return;
+  }
   if (tab === "dashboard") loadFilterOptions();
   if (tab === "daily") autoStartGPS();
   if (tab === "fieldmap") {
@@ -4638,6 +4700,8 @@ var targetUnlocked   = false;
 var deliveryUnlocked = false;
 var plannerUnlocked  = false;
 var empUnlocked      = false;
+var vsUnlocked       = false;
+var vsAllData        = [];   // full village stats array cached for filtering
 var billRecords     = [];
 var billYearsInited = false;
 
@@ -6808,6 +6872,114 @@ function unlockEmployees() {
     document.getElementById('empPwd').placeholder = '❌ Wrong password';
     setTimeout(function(){ document.getElementById('empPwd').placeholder = 'Password'; }, 1500);
   }
+}
+
+// ════════════════════════════════════════════════════════════
+// VILLAGE STATS TAB
+// ════════════════════════════════════════════════════════════
+function unlockVillageStats() {
+  if (document.getElementById('vsPwd').value === '220285') {
+    vsUnlocked = true;
+    document.getElementById('vsLockScreen').style.display = 'none';
+    document.getElementById('vsContent').style.display    = 'block';
+    loadVillageStats();
+  } else {
+    showToast('❌ Wrong password', 1500, '#c62828');
+  }
+}
+
+function loadVillageStats() {
+  document.getElementById('vsStatus').textContent = '⏳ Loading village data…';
+  document.getElementById('vsWrap').innerHTML = '';
+  document.getElementById('vsSummary').innerHTML = '';
+  gasCall('getVillageMasterStats', {}, function(data) {
+    vsAllData = data.villages || [];
+    var s = data.summary || {};
+    // Summary cards
+    var cards = [
+      { label: 'Total Villages', value: s.total || 0, bg: '#e3f2fd', color: '#0d47a1' },
+      { label: 'In Master', value: s.inMaster || 0, bg: '#e8f5e9', color: '#1b5e20' },
+      { label: 'CRM Visited', value: s.withCRM || 0, bg: '#fff3e0', color: '#e65100' },
+      { label: 'Total Visits', value: s.totalVisits || 0, bg: '#f3e5f5', color: '#4a148c' }
+    ];
+    document.getElementById('vsSummary').innerHTML = cards.map(function(c) {
+      return '<div style="flex:1;min-width:110px;background:' + c.bg + ';border-radius:10px;padding:12px;text-align:center;">'
+        + '<div style="font-size:22px;font-weight:800;color:' + c.color + ';">' + c.value + '</div>'
+        + '<div style="font-size:11px;color:#555;font-weight:600;">' + c.label + '</div></div>';
+    }).join('');
+    // Populate area dropdown dynamically
+    var areas = {};
+    vsAllData.forEach(function(v){ if (v.area) areas[v.area] = true; });
+    var areaSel = document.getElementById('vsFilterArea');
+    areaSel.innerHTML = '<option value="All">All Areas</option>'
+      + Object.keys(areas).sort().map(function(a){ return '<option value="'+a+'">'+a+'</option>'; }).join('');
+    document.getElementById('vsStatus').textContent = vsAllData.length + ' villages loaded';
+    renderVillageStats();
+  }, function() {
+    document.getElementById('vsStatus').textContent = '❌ Load failed';
+  });
+}
+
+function renderVillageStats() {
+  var area    = document.getElementById('vsFilterArea').value;
+  var master  = document.getElementById('vsFilterMaster').value;
+  var search  = (document.getElementById('vsSearch').value || '').toLowerCase();
+  var ACT_COLS = ['Field','Demo','Display+Canopy','Service Camp','Showroom','Tractor Service-At Field','Tractor Service-At Showroom'];
+
+  var rows = vsAllData.filter(function(v) {
+    if (area !== 'All' && v.area !== area) return false;
+    if (master === 'Y' && !v.inMaster) return false;
+    if (master === 'N' &&  v.inMaster) return false;
+    if (search && v.village.toLowerCase().indexOf(search) === -1) return false;
+    return true;
+  });
+
+  document.getElementById('vsStatus').textContent = rows.length + ' of ' + vsAllData.length + ' villages shown';
+
+  if (!rows.length) {
+    document.getElementById('vsWrap').innerHTML = '<div style="color:#888;padding:16px;text-align:center;">No villages match the filter</div>';
+    return;
+  }
+
+  var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px;">'
+    + '<thead><tr style="background:#e8eaf6;position:sticky;top:0;">'
+    + '<th style="padding:8px;text-align:left;font-weight:700;color:#333;">Village</th>'
+    + '<th style="padding:8px;text-align:left;font-weight:700;color:#333;">Area</th>'
+    + '<th style="padding:8px;text-align:left;font-weight:700;color:#333;">Salesman</th>'
+    + '<th style="padding:8px;text-align:center;font-weight:700;color:#1b5e20;">Master</th>'
+    + ACT_COLS.map(function(a) {
+        return '<th style="padding:8px;text-align:center;font-weight:700;color:#1565c0;">' + a.split(' ')[0] + '</th>';
+      }).join('')
+    + '<th style="padding:8px;text-align:center;font-weight:700;color:#4a148c;">Other</th>'
+    + '<th style="padding:8px;text-align:center;font-weight:700;color:#333;">Total</th>'
+    + '<th style="padding:8px;text-align:left;font-weight:700;color:#555;">Last Visit</th>'
+    + '</tr></thead><tbody>';
+
+  rows.forEach(function(v, i) {
+    var knownTotal = 0;
+    var actCells = ACT_COLS.map(function(a) {
+      var cnt = v.actCounts[a] || 0;
+      knownTotal += cnt;
+      return '<td style="padding:6px 8px;text-align:center;color:' + (cnt > 0 ? '#1565c0' : '#ccc') + ';font-weight:' + (cnt > 0 ? '700' : '400') + ';">' + (cnt || '—') + '</td>';
+    }).join('');
+    var other = v.total - knownTotal;
+    var masterCell = v.inMaster
+      ? '<td style="padding:6px 8px;text-align:center;color:#2e7d32;font-weight:700;">✅</td>'
+      : '<td style="padding:6px 8px;text-align:center;color:#bbb;">—</td>';
+    html += '<tr style="background:' + (i%2===0?'#fff':'#f8f9ff') + ';border-bottom:1px solid #f0f0f0;">'
+      + '<td style="padding:6px 8px;font-weight:700;">' + v.village + '</td>'
+      + '<td style="padding:6px 8px;"><span style="background:' + (v.area==='Phagi'?'#e8f5e9':'#e3f2fd') + ';color:' + (v.area==='Phagi'?'#1b5e20':'#0d47a1') + ';padding:2px 7px;border-radius:8px;font-size:11px;font-weight:700;">' + (v.area||'—') + '</span></td>'
+      + '<td style="padding:6px 8px;color:#555;">' + (v.salesman||'—') + '</td>'
+      + masterCell
+      + actCells
+      + '<td style="padding:6px 8px;text-align:center;color:' + (other>0?'#888':'#ccc') + ';">' + (other>0?other:'—') + '</td>'
+      + '<td style="padding:6px 8px;text-align:center;font-weight:' + (v.total>0?'700':'400') + ';color:' + (v.total>0?'#4a148c':'#ccc') + ';">' + (v.total||'—') + '</td>'
+      + '<td style="padding:6px 8px;color:#666;font-size:11px;">' + (v.lastVisit||'—') + '</td>'
+      + '</tr>';
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('vsWrap').innerHTML = html;
 }
 
 function doSyncTeam() {
