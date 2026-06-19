@@ -6964,10 +6964,13 @@ function renderVillageStats() {
     }).join('');
     var other = v.total - knownTotal;
     var masterCell = v.inMaster
-      ? '<td style="padding:6px 8px;text-align:center;color:#2e7d32;font-weight:700;">✅</td>'
-      : '<td style="padding:6px 8px;text-align:center;color:#bbb;">—</td>';
-    html += '<tr style="background:' + (i%2===0?'#fff':'#f8f9ff') + ';border-bottom:1px solid #f0f0f0;">'
-      + '<td style="padding:6px 8px;font-weight:700;">' + v.village + '</td>'
+      ? '<td style="padding:6px 8px;text-align:center;color:#2e7d32;font-size:16px;" title="In Master">🟢</td>'
+      : '<td style="padding:6px 8px;text-align:center;color:#c62828;font-size:16px;" title="Not in Master">🔴</td>';
+    var rowBg = v.inMaster ? (i%2===0?'#f1f8e9':'#e8f5e9') : (i%2===0?'#fff':'#fff8f8');
+    html += '<tr style="background:' + rowBg + ';border-bottom:1px solid #f0f0f0;">'
+      + '<td style="padding:6px 8px;font-weight:700;">'
+      + (v.inMaster ? '<span style="color:#2e7d32;margin-right:4px;">●</span>' : '<span style="color:#c62828;margin-right:4px;">●</span>')
+      + v.village + '</td>'
       + '<td style="padding:6px 8px;"><span style="background:' + (v.area==='Phagi'?'#e8f5e9':'#e3f2fd') + ';color:' + (v.area==='Phagi'?'#1b5e20':'#0d47a1') + ';padding:2px 7px;border-radius:8px;font-size:11px;font-weight:700;">' + (v.area||'—') + '</span></td>'
       + '<td style="padding:6px 8px;color:#555;">' + (v.salesman||'—') + '</td>'
       + masterCell
