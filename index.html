@@ -7009,25 +7009,30 @@ function vmRender() {
         + '</select>'
       + '</td>'
       + '<td style="padding:6px 10px;text-align:center;white-space:nowrap;">'
-        + '<button onclick="vmSave('+v.rowNum+')" style="background:#1565c0;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;margin-right:4px;">💾</button>'
-        + '<button onclick="vmDelete('+v.rowNum+',\''+escHtml(v.village)+'\')" style="background:#c62828;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">🗑️</button>'
+        + '<button onclick="vmSave('+v.rowNum+',\''+escHtml(v.village)+'\')" style="background:#1565c0;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;margin-right:4px;">💾</button>'
+        + (v.rowNum > 0
+            ? '<button onclick="vmDelete('+v.rowNum+',\''+escHtml(v.village)+'\')" style="background:#c62828;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">🗑️</button>'
+            : '<span style="font-size:10px;color:#bbb;">seed</span>')
       + '</td>'
       + '</tr>';
   }).join('');
   document.getElementById('vmBody').innerHTML = html || '<tr><td colspan="5" style="text-align:center;color:#aaa;padding:20px;">No villages found</td></tr>';
 }
 
-function vmSave(rowNum) {
+function vmSave(rowNum, originalVillage) {
   var village  = document.getElementById('vmV_'+rowNum).value.trim();
   var area     = document.getElementById('vmA_'+rowNum).value;
   var salesman = document.getElementById('vmS_'+rowNum).value;
   if (!village || !area) { showToast('Village and Area required', 1500, '#c62828'); return; }
-  gasCall('saveVillage', { village: village, area: area, salesman: salesman }, function() {
-    showToast('✅ Saved', 1200, '#2e7d32');
-    // update local cache
-    var idx = vmData.findIndex ? vmData.findIndex(function(v){ return v.rowNum === rowNum; })
-      : (function(){ for(var i=0;i<vmData.length;i++) if(vmData[i].rowNum===rowNum) return i; return -1; })();
-    if (idx !== -1) { vmData[idx].village = village; vmData[idx].area = area; vmData[idx].salesman = salesman; }
+  // For seed rows (rowNum=-1) saveVillage will upsert by village name key
+  var saveKey = (rowNum < 0 && originalVillage) ? originalVillage : village;
+  gasCall('saveVillage', { village: saveKey, area: area, salesman: salesman }, function() {
+    showToast('✅ Saved — ' + saveKey, 1400, '#2e7d32');
+    var idx = -1;
+    for (var i = 0; i < vmData.length; i++) { if (vmData[i].rowNum === rowNum) { idx = i; break; } }
+    if (idx !== -1) { vmData[idx].salesman = salesman; vmData[idx].area = area; vmData[idx].rowNum = rowNum < 0 ? rowNum : rowNum; }
+    // Reload to get fresh rowNums after any appends
+    if (rowNum < 0) vmLoad();
   }, function() { showToast('❌ Save failed', 1500, '#c62828'); });
 }
 
