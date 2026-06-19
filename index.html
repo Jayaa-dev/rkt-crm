@@ -2712,6 +2712,7 @@
             <input id="vsSearch" type="text" placeholder="🔍 Search village…" oninput="renderVillageStats()"
               style="flex:2;min-width:130px;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
             <button onclick="loadVillageStats()" style="background:#1565c0;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">🔄 Refresh</button>
+            <button onclick="addNewVillageToMaster()" style="background:#2e7d32;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">+ Add Village</button>
           </div>
         </div>
 
@@ -6877,6 +6878,34 @@ function unlockEmployees() {
 // ════════════════════════════════════════════════════════════
 // VILLAGE STATS TAB
 // ════════════════════════════════════════════════════════════
+function addToMaster(village, area, salesman) {
+  var areaVal = area || prompt('Area for ' + village + '?', '');
+  if (areaVal === null) return;
+  var salesmanVal = salesman || prompt('Salesman for ' + village + '? (optional)', '');
+  if (salesmanVal === null) salesmanVal = '';
+  gasCall('saveVillage', { village: village, area: areaVal, salesman: salesmanVal }, function() {
+    showToast('✅ ' + village + ' added to Master', 1800, '#2e7d32');
+    loadVillageStats();
+  }, function() {
+    showToast('❌ Failed to add village', 1800, '#c62828');
+  });
+}
+
+function addNewVillageToMaster() {
+  var village  = prompt('Village Name?', '');
+  if (!village || !village.trim()) return;
+  var area     = prompt('Area? (e.g. Phagi / Dudu)', '');
+  if (area === null) return;
+  var salesman = prompt('Salesman? (optional)', '');
+  if (salesman === null) salesman = '';
+  gasCall('saveVillage', { village: village.trim(), area: area.trim(), salesman: salesman.trim() }, function() {
+    showToast('✅ ' + village.trim() + ' added to Master', 1800, '#2e7d32');
+    loadVillageStats();
+  }, function() {
+    showToast('❌ Failed to save', 1800, '#c62828');
+  });
+}
+
 function unlockVillageStats() {
   if (document.getElementById('vsPwd').value === '220285') {
     vsUnlocked = true;
@@ -6933,6 +6962,11 @@ function renderVillageStats() {
     if (search && v.village.toLowerCase().indexOf(search) === -1) return false;
     return true;
   });
+  // Master villages always sort to top, then alphabetical
+  rows.sort(function(a, b) {
+    if (a.inMaster !== b.inMaster) return a.inMaster ? -1 : 1;
+    return a.village.localeCompare(b.village);
+  });
 
   document.getElementById('vsStatus').textContent = rows.length + ' of ' + vsAllData.length + ' villages shown';
 
@@ -6965,7 +6999,9 @@ function renderVillageStats() {
     var other = v.total - knownTotal;
     var masterCell = v.inMaster
       ? '<td style="padding:6px 8px;text-align:center;color:#2e7d32;font-size:16px;" title="In Master">🟢</td>'
-      : '<td style="padding:6px 8px;text-align:center;color:#c62828;font-size:16px;" title="Not in Master">🔴</td>';
+      : '<td style="padding:6px 8px;text-align:center;">'
+        + '<button onclick="addToMaster(' + JSON.stringify(v.village) + ',' + JSON.stringify(v.area||'') + ',' + JSON.stringify(v.salesman||'') + ')" '
+        + 'style="background:#e53935;color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;">+ Master</button></td>';
     var rowBg = v.inMaster ? (i%2===0?'#f1f8e9':'#e8f5e9') : (i%2===0?'#fff':'#fff8f8');
     html += '<tr style="background:' + rowBg + ';border-bottom:1px solid #f0f0f0;">'
       + '<td style="padding:6px 8px;font-weight:700;">'
