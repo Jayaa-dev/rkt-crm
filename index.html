@@ -247,7 +247,7 @@
 
   // ── gasCall() — replaces all google.script.run calls ──────
   function gasCall(action, params, onSuccess, onFailure) {
-    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride','saveDelivery','saveVillage','deleteVillage','saveRule','deleteRule','generatePlan','updatePlanStatus','saveEmployee','deleteEmployee','sendReminders','assignPlanRow','publishPlan','saveChosenActivity','syncTeamFromCRM'].indexOf(action) !== -1;
+    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride','saveDelivery','saveVillage','deleteVillage','saveRule','deleteRule','generatePlan','updatePlanStatus','saveEmployee','deleteEmployee','sendReminders','assignPlanRow','publishPlan','saveChosenActivity','syncTeamFromCRM','saveDayStart'].indexOf(action) !== -1;
     var promise;
     if (isWrite) {
       // POST for write operations (image uploads etc.)
@@ -1320,6 +1320,45 @@
     <div id="section-daily" class="section active">
 
       <div class="quote-box" id="quoteBox"></div>
+
+      <!-- ══ DAY START CARD ══════════════════════════════════ -->
+      <div class="card" id="dayStartCard" style="border-left:4px solid #f57f17;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span style="font-size:22px;">🌅</span>
+          <div style="flex:1;">
+            <div style="font-weight:800;font-size:14px;color:#e65100;">Day Start</div>
+            <div style="font-size:11px;color:#888;">Log your start time &amp; location for today</div>
+          </div>
+          <div id="dayStartBadge" style="display:none;background:#e8f5e9;border:1.5px solid #a5d6a7;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;color:#2e7d32;white-space:nowrap;">✅ Started</div>
+        </div>
+
+        <!-- Already started banner -->
+        <div id="dayStartDone" style="display:none;background:#f1f8e9;border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px;color:#33691e;">
+          <b>🕐 Day started at <span id="dayStartedTime">—</span></b><br>
+          <span style="font-size:11px;color:#558b2f;" id="dayStartedGPS"></span>
+        </div>
+
+        <!-- Entry form -->
+        <div id="dayStartForm">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:1;min-width:140px;">
+              <label style="font-size:11px;font-weight:700;color:#555;display:block;margin-bottom:3px;">Salesman</label>
+              <select id="dsName" style="width:100%;padding:8px 10px;border:1.5px solid #ffe0b2;border-radius:8px;font-size:13px;">
+                <option value="">— Select —</option>
+              </select>
+            </div>
+            <div style="flex:2;min-width:160px;">
+              <label style="font-size:11px;font-weight:700;color:#555;display:block;margin-bottom:3px;">Note (optional)</label>
+              <input type="text" id="dsNote" placeholder="e.g. Starting from office" style="width:100%;padding:8px 10px;border:1.5px solid #ffe0b2;border-radius:8px;font-size:13px;box-sizing:border-box;">
+            </div>
+          </div>
+
+          <div id="dsGpsStatus" style="font-size:12px;color:#888;margin:8px 0 4px;">📍 GPS: will capture on submit…</div>
+
+          <button id="dsSubmitBtn" onclick="submitDayStart()" style="width:100%;background:#f57f17;color:#fff;border:none;border-radius:9px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;margin-top:6px;">🌅 Start My Day</button>
+        </div>
+      </div>
+      <!-- ══ END DAY START CARD ════════════════════════════════ -->
 
       <!-- GPS FIELD INSTRUCTION BANNER -->
       <div id="gpsInstructionBanner" style="background:linear-gradient(135deg,#e3f2fd,#bbdefb);border-left:4px solid #1565c0;border-radius:10px;padding:14px 14px;margin:8px 12px;font-size:14px;color:#0d47a1;">
@@ -3207,6 +3246,9 @@ window.onload = function() {
   // Quote
   document.getElementById("quoteBox").textContent = QUOTES[new Date().getDate() % QUOTES.length];
 
+  // Day Start init (after brief delay so salesman dropdown is rendered)
+  setTimeout(initDayStart, 300);
+
   // Attendance year dropdown
   var yr = new Date().getFullYear();
   var yrSel = document.getElementById("attYear");
@@ -4027,11 +4069,24 @@ function renderAttendance(data) {
     });
     var firstDow = new Date(data.year, data.month - 1, 1).getDay();
     for (var b = 0; b < firstDow; b++) cal += "<div class='cal-day day-empty'></div>";
+    var smDayStart = (data.dayStartMap && data.dayStartMap[r.salesman]) || {};
     data.calendar.forEach(function(c2) {
       var st  = r.dayStatus[c2.dateKey] || "future";
       var cls = statusClass[st] || "day-future";
       var lbl = statusLabel[st] || "";
-      cal += "<div class='cal-day " + cls + "'><span class='dn'>" + c2.day + "</span><span class='dl'>" + lbl + "</span></div>";
+      var ds  = smDayStart[c2.dateKey];
+      var dsHtml = '';
+      if (ds && ds.startTime) {
+        dsHtml = '<span class="dl-time" style="display:block;font-size:8px;color:#1565c0;font-weight:700;line-height:1.2;margin-top:1px;">' + ds.startTime + '</span>';
+        if (ds.gpsLink) {
+          dsHtml += '<a href="' + ds.gpsLink + '" target="_blank" style="display:block;font-size:8px;color:#e65100;line-height:1;" title="View Start Location">📍</a>';
+        }
+      }
+      cal += "<div class='cal-day " + cls + "' title='" + c2.dateKey + (ds ? ' — Started: ' + ds.startTime : '') + "'>"
+           + "<span class='dn'>" + c2.day + "</span>"
+           + "<span class='dl'>" + lbl + "</span>"
+           + dsHtml
+           + "</div>";
     });
     cal += "</div>";
 
@@ -7358,6 +7413,99 @@ function addNewVillageToMaster() {
   }, function() {
     showToast('❌ Failed to save', 1800, '#c62828');
   });
+}
+
+// ── Day Start ──────────────────────────────────────────────────
+var dsLat = '', dsLng = '';
+
+function initDayStart() {
+  // Populate salesman dropdown from existing salesman select
+  var src  = document.getElementById('salesman');
+  var dest = document.getElementById('dsName');
+  dest.innerHTML = '<option value="">— Select —</option>';
+  for (var i = 1; i < src.options.length; i++) {
+    var o = document.createElement('option');
+    o.value = src.options[i].value;
+    o.textContent = src.options[i].textContent;
+    dest.appendChild(o);
+  }
+
+  // Restore last salesman
+  var savedSm = localStorage.getItem('dayStartSalesman') || '';
+  if (savedSm) dest.value = savedSm;
+
+  // Check if already started today
+  checkTodayDayStart(savedSm);
+}
+
+function checkTodayDayStart(salesman) {
+  gasCall('getTodayDayStart', { salesman: salesman || '' }, function(data) {
+    if (data.found) {
+      showDayStartDone(data.startTime, data.gpsLink, data.salesman);
+    }
+  });
+}
+
+function showDayStartDone(startTime, gpsLink, salesman) {
+  document.getElementById('dayStartForm').style.display = 'none';
+  document.getElementById('dayStartDone').style.display = 'block';
+  document.getElementById('dayStartBadge').style.display = 'block';
+  document.getElementById('dayStartedTime').textContent  = startTime || '—';
+  var gpsEl = document.getElementById('dayStartedGPS');
+  if (gpsLink) {
+    gpsEl.innerHTML = '📍 <a href="' + gpsLink + '" target="_blank" style="color:#1565c0;">View Start Location</a>';
+  } else {
+    gpsEl.textContent = '📍 No GPS recorded';
+  }
+  if (salesman) {
+    document.getElementById('dsName').value = salesman;
+    localStorage.setItem('dayStartSalesman', salesman);
+  }
+}
+
+function submitDayStart() {
+  var salesman = document.getElementById('dsName').value;
+  var note     = (document.getElementById('dsNote').value || '').trim();
+  if (!salesman) { showToast('Select your name first', 1400, '#c62828'); return; }
+
+  var btn = document.getElementById('dsSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = '📍 Getting location…';
+
+  // Capture actual current time at moment of tap
+  var now = new Date();
+  var startTime = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+
+  document.getElementById('dsGpsStatus').innerHTML = '📍 GPS: locating…';
+
+  function saveWithCoords(lat, lng) {
+    var gpsLink = (lat && lng) ? 'https://maps.google.com/?q=' + lat + ',' + lng : '';
+    document.getElementById('dsGpsStatus').innerHTML = lat
+      ? '📍 <b style="color:#2e7d32;">' + lat + ', ' + lng + '</b> <a href="' + gpsLink + '" target="_blank" style="font-size:11px;color:#1565c0;">View Map</a>'
+      : '⚠️ GPS not available — saved without location';
+
+    btn.textContent = '⏳ Saving…';
+    gasCall('saveDayStart', { salesman: salesman, startTime: startTime, lat: lat, lng: lng, note: note }, function() {
+      localStorage.setItem('dayStartSalesman', salesman);
+      showToast('✅ Day started at ' + startTime, 2000, '#2e7d32');
+      showDayStartDone(startTime, gpsLink, salesman);
+      if (document.getElementById('salesman')) document.getElementById('salesman').value = salesman;
+    }, function() {
+      showToast('❌ Failed to save', 1800, '#c62828');
+      btn.disabled = false;
+      btn.textContent = '🌅 Start My Day';
+    });
+  }
+
+  if (!navigator.geolocation) {
+    saveWithCoords('', '');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    saveWithCoords(pos.coords.latitude.toFixed(6), pos.coords.longitude.toFixed(6));
+  }, function() {
+    saveWithCoords('', '');
+  }, { enableHighAccuracy: true, timeout: 10000 });
 }
 
 function unlockVillageStats() {
