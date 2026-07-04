@@ -6306,25 +6306,55 @@ function renderVillageList() {
     return;
   }
 
-  var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+  // Build salesman options once
+  var smOpts = '<option value="">— Unassigned —</option>'
+    + ['Abhishek','Shivdayal','Roduram','Hemraj','Sahil','Giriraj'].map(function(s){
+        return '<option value="'+s+'">'+s+'</option>';
+      }).join('');
+
+  var html = '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
     + '<thead><tr style="background:#e8eaf6;">'
     + '<th style="padding:8px 10px;text-align:left;font-weight:700;color:#283593;">Village</th>'
     + '<th style="padding:8px 10px;text-align:left;font-weight:700;color:#283593;">Area</th>'
     + '<th style="padding:8px 10px;text-align:left;font-weight:700;color:#283593;">Salesman</th>'
-    + '<th style="padding:8px 10px;"></th>'
     + '</tr></thead><tbody>';
 
   list.forEach(function(v, i) {
-    var odd = i % 2 === 0;
-    html += '<tr style="background:' + (odd ? '#fff' : '#f8f9ff') + ';">'
-      + '<td style="padding:7px 10px;">' + v.village + '</td>'
-      + '<td style="padding:7px 10px;"><span style="background:' + (v.area==='Phagi'?'#e8f5e9':'#e3f2fd') + ';color:' + (v.area==='Phagi'?'#1b5e20':'#0d47a1') + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">' + v.area + '</span></td>'
-      + '<td style="padding:7px 10px;color:' + (v.salesman ? '#333' : '#bbb') + ';">' + (v.salesman || '— unassigned') + '</td>'
-      + '<td style="padding:7px 8px;"><button onclick="prefillVillageAssign(' + JSON.stringify(v.village) + ',' + JSON.stringify(v.area) + ',' + JSON.stringify(v.salesman) + ')" style="background:#e3f2fd;color:#1565c0;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Edit</button></td>'
+    var selOpts = smOpts.replace('value="'+(v.salesman||'')+'"', 'value="'+(v.salesman||'')+'" selected');
+    html += '<tr style="background:' + (i%2===0?'#fff':'#f8f9ff') + ';border-bottom:1px solid #f0f0f0;">'
+      + '<td style="padding:7px 10px;font-weight:600;">' + v.village + '</td>'
+      + '<td style="padding:7px 10px;"><span style="background:' + (v.area==='Phagi'?'#e8f5e9':'#e3f2fd') + ';color:' + (v.area==='Phagi'?'#1b5e20':'#0d47a1') + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">' + (v.area||'—') + '</span></td>'
+      + '<td style="padding:5px 8px;">'
+        + '<select onchange="inlineAssignSalesman(' + JSON.stringify(v.village) + ',' + JSON.stringify(v.area||'') + ',this)" '
+          + 'style="width:100%;padding:5px 8px;border:1.5px solid #c5cae9;border-radius:7px;font-size:12px;background:#fff;cursor:pointer;">'
+        + selOpts
+        + '</select>'
+      + '</td>'
       + '</tr>';
   });
   html += '</tbody></table>';
   document.getElementById('villageListWrap').innerHTML = html;
+}
+
+function inlineAssignSalesman(village, area, sel) {
+  var salesman = sel.value;
+  sel.disabled = true;
+  sel.style.opacity = '0.6';
+  gasCall('saveVillage', { village: village, area: area, salesman: salesman }, function() {
+    // Update local cache
+    plannerVillages.forEach(function(v) {
+      if (v.village.toUpperCase() === village.toUpperCase()) v.salesman = salesman;
+    });
+    sel.disabled = false;
+    sel.style.opacity = '1';
+    sel.style.borderColor = '#a5d6a7';
+    showToast('✅ ' + village + ' → ' + (salesman || 'Unassigned'), 1500, '#2e7d32');
+    setTimeout(function(){ sel.style.borderColor = '#c5cae9'; }, 2000);
+  }, function() {
+    sel.disabled = false;
+    sel.style.opacity = '1';
+    showToast('❌ Save failed', 1500, '#c62828');
+  });
 }
 
 function prefillVillageAssign(village, area, salesman) {
