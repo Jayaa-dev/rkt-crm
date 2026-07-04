@@ -4078,9 +4078,9 @@ function renderAttendance(data) {
       var ds  = smDayStart[c2.dateKey];
       var dsHtml = '';
       if (ds && ds.startTime) {
-        dsHtml = '<span class="dl-time" style="display:block;font-size:8px;color:#1565c0;font-weight:700;line-height:1.2;margin-top:1px;">' + ds.startTime + '</span>';
+        dsHtml = '<span style="display:block;font-size:8px;color:#1565c0;font-weight:700;line-height:1.3;margin-top:2px;">' + ds.startTime + '</span>';
         if (ds.gpsLink) {
-          dsHtml += '<a href="' + ds.gpsLink + '" target="_blank" style="display:block;font-size:8px;color:#e65100;line-height:1;" title="View Start Location">📍</a>';
+          dsHtml += '<a href="' + ds.gpsLink + '" target="_blank" style="display:block;font-size:9px;line-height:1;" title="View Start Location">📍</a>';
         }
       }
       cal += "<div class='cal-day " + cls + "' title='" + c2.dateKey + (ds ? ' — Started: ' + ds.startTime : '') + "'>"
@@ -7435,33 +7435,32 @@ function initDayStart() {
   var savedSm = localStorage.getItem('dayStartSalesman') || '';
   if (savedSm) dest.value = savedSm;
 
-  // Check if already started today
+  // Always show the form — entry allowed every day
+  document.getElementById('dayStartForm').style.display = 'block';
+  document.getElementById('dayStartDone').style.display = 'none';
+  document.getElementById('dayStartBadge').style.display = 'none';
+
+  // Show last entry today if exists (as info only, form stays open)
   checkTodayDayStart(savedSm);
 }
 
 function checkTodayDayStart(salesman) {
   gasCall('getTodayDayStart', { salesman: salesman || '' }, function(data) {
     if (data.found) {
-      showDayStartDone(data.startTime, data.gpsLink, data.salesman);
+      // Show last entry info but keep form open for new entries
+      document.getElementById('dayStartDone').style.display = 'block';
+      document.getElementById('dayStartBadge').style.display = 'block';
+      document.getElementById('dayStartedTime').textContent = data.startTime || '—';
+      var gpsEl = document.getElementById('dayStartedGPS');
+      gpsEl.innerHTML = data.gpsLink
+        ? '📍 <a href="' + data.gpsLink + '" target="_blank" style="color:#1565c0;">View Last Location</a>'
+        : '📍 No GPS recorded';
+      if (data.salesman) {
+        document.getElementById('dsName').value = data.salesman;
+        localStorage.setItem('dayStartSalesman', data.salesman);
+      }
     }
   });
-}
-
-function showDayStartDone(startTime, gpsLink, salesman) {
-  document.getElementById('dayStartForm').style.display = 'none';
-  document.getElementById('dayStartDone').style.display = 'block';
-  document.getElementById('dayStartBadge').style.display = 'block';
-  document.getElementById('dayStartedTime').textContent  = startTime || '—';
-  var gpsEl = document.getElementById('dayStartedGPS');
-  if (gpsLink) {
-    gpsEl.innerHTML = '📍 <a href="' + gpsLink + '" target="_blank" style="color:#1565c0;">View Start Location</a>';
-  } else {
-    gpsEl.textContent = '📍 No GPS recorded';
-  }
-  if (salesman) {
-    document.getElementById('dsName').value = salesman;
-    localStorage.setItem('dayStartSalesman', salesman);
-  }
 }
 
 function submitDayStart() {
@@ -7486,10 +7485,20 @@ function submitDayStart() {
       : '⚠️ GPS not available — saved without location';
 
     btn.textContent = '⏳ Saving…';
-    gasCall('saveDayStart', { salesman: salesman, startTime: startTime, lat: lat, lng: lng, note: note }, function() {
+    gasCall('saveDayStart', { salesman: salesman, time: startTime, lat: lat, lng: lng, note: note }, function() {
       localStorage.setItem('dayStartSalesman', salesman);
       showToast('✅ Day started at ' + startTime, 2000, '#2e7d32');
-      showDayStartDone(startTime, gpsLink, salesman);
+      // Update the last-entry info strip, keep form open
+      document.getElementById('dayStartDone').style.display = 'block';
+      document.getElementById('dayStartBadge').style.display = 'block';
+      document.getElementById('dayStartedTime').textContent = startTime;
+      var gpsEl = document.getElementById('dayStartedGPS');
+      gpsEl.innerHTML = gpsLink
+        ? '📍 <a href="' + gpsLink + '" target="_blank" style="color:#1565c0;">View Last Location</a>'
+        : '📍 No GPS recorded';
+      document.getElementById('dsGpsStatus').textContent = '📍 GPS: will capture on submit…';
+      var btn2 = document.getElementById('dsSubmitBtn');
+      btn2.disabled = false; btn2.textContent = '🌅 Start My Day';
       if (document.getElementById('salesman')) document.getElementById('salesman').value = salesman;
     }, function(err) {
       var msg = (err && err.message) ? err.message : 'Unknown error';
