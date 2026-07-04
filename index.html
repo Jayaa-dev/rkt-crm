@@ -7045,41 +7045,132 @@ function vmRenderBySalesman(rows) {
   document.getElementById('vmBody').innerHTML = '';
   var container = document.getElementById('vmSalesmanView');
   container.style.display = '';
-  // Group by salesman
-  var groups = {};
-  rows.forEach(function(v) {
-    var sm = v.salesman || '— Unassigned —';
+
+  // Build full employee list from dropdown
+  var empSel = document.getElementById('vmNewSalesman');
+  var salesmen = [];
+  for (var oi = 0; oi < empSel.options.length; oi++) {
+    if (empSel.options[oi].value) salesmen.push(empSel.options[oi].value);
+  }
+
+  // Group ALL vmData by salesman (not just filtered rows — so unassigned villages appear)
+  var search = (document.getElementById('vmSearch').value || '').toLowerCase();
+  var areaF  = document.getElementById('vmAreaFilter').value;
+  var groups = { '— Unassigned —': [] };
+  salesmen.forEach(function(sm){ groups[sm] = []; });
+  vmData.forEach(function(v) {
+    if (areaF !== 'All' && v.area !== areaF) return;
+    if (search && v.village.toLowerCase().indexOf(search) === -1) return;
+    var sm = v.salesman && v.salesman.trim() ? v.salesman.trim() : '— Unassigned —';
     if (!groups[sm]) groups[sm] = [];
     groups[sm].push(v);
   });
-  var empOpts = document.getElementById('vmNewSalesman').innerHTML;
+
   var colors = ['#e3f2fd','#f3e5f5','#e8f5e9','#fff3e0','#fce4ec','#e0f7fa','#f9fbe7'];
   var html = '<div style="display:flex;flex-direction:column;gap:12px;">';
   var ci = 0;
-  Object.keys(groups).sort().forEach(function(sm) {
-    var vils = groups[sm];
-    var bg = sm === '— Unassigned —' ? '#fafafa' : colors[ci++ % colors.length];
-    html += '<div style="border-radius:10px;border:1.5px solid #e0e0e0;overflow:hidden;">'
-      + '<div style="background:'+bg+';padding:10px 14px;display:flex;align-items:center;gap:10px;">'
-      + '<span style="font-size:14px;">👤</span>'
-      + '<span style="font-weight:800;font-size:13px;flex:1;">' + escHtml(sm) + '</span>'
-      + '<span style="background:#fff;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700;color:#555;">'
-        + vils.length + ' village' + (vils.length !== 1 ? 's' : '') + '</span>'
-      + '</div>'
-      + '<div style="display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;">';
-    vils.forEach(function(v) {
-      html += '<div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:6px 10px;min-width:140px;flex:1;max-width:200px;">'
-        + '<div style="font-weight:700;font-size:12px;margin-bottom:4px;">'+escHtml(v.village)+'</div>'
-        + '<div style="font-size:11px;color:#888;margin-bottom:6px;">'+escHtml(v.area||'—')+'</div>'
-        + '<select onchange="vmQuickAssign('+v.rowNum+',\''+escHtml(v.village)+'\',this.value)" style="width:100%;border:1px solid #ddd;border-radius:5px;padding:3px 5px;font-size:11px;">'
-        + empOpts.replace('value="'+escHtml(v.salesman)+'"', 'value="'+escHtml(v.salesman)+'" selected')
-        + '</select>'
+
+  // Render salesmen first (with villages), then Unassigned at bottom
+  var keys = salesmen.concat(['— Unassigned —']);
+  keys.forEach(function(sm) {
+    var vils = groups[sm] || [];
+    var isUnassigned = sm === '— Unassigned —';
+    var bg = isUnassigned ? '#fafafa' : colors[ci++ % colors.length];
+    var smKey = escHtml(sm);
+
+    // Village chips
+    var chipsHtml = vils.length
+      ? vils.map(function(v) {
+          return '<span style="display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid #ddd;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;">'
+            + escHtml(v.village)
+            + (v.area ? ' <span style="font-size:10px;color:#aaa;">('+escHtml(v.area)+')</span>' : '')
+            + (isUnassigned ? '' :
+                '<button onclick="vmQuickAssign('+v.rowNum+',\''+escHtml(v.village)+'\',\'\')" '
+                + 'title="Unassign" style="background:none;border:none;cursor:pointer;color:#c62828;font-size:13px;line-height:1;padding:0 2px;">✕</button>')
+            + '</span>';
+        }).join(' ')
+      : '<span style="font-size:12px;color:#bbb;font-style:italic;">No villages assigned</span>';
+
+    // "+ Add Villages" picker (only for named salesmen)
+    var addBtnHtml = '';
+    if (!isUnassigned) {
+      addBtnHtml = '<button onclick="vmTogglePicker(\'picker_'+smKey+'\')" '
+        + 'style="background:#1565c0;color:#fff;border:none;border-radius:16px;padding:3px 12px;font-size:11px;font-weight:700;cursor:pointer;">+ Add Villages</button>';
+    }
+
+    // Multi-select picker (hidden by default)
+    var pickerHtml = '';
+    if (!isUnassigned) {
+      // Villages not yet assigned to this salesman
+      var available = vmData.filter(function(v) {
+        return (!v.salesman || v.salesman.trim() !== sm);
+      });
+      pickerHtml = '<div id="picker_'+smKey+'" style="display:none;margin-top:10px;background:#f9f9f9;border:1px solid #e0e0e0;border-radius:8px;padding:10px;">'
+        + '<div style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px;">Select villages to assign to ' + smKey + ':</div>'
+        + '<div style="max-height:160px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">'
+        + (available.length ? available.map(function(v) {
+            return '<label style="display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid #ddd;border-radius:16px;padding:3px 10px;font-size:12px;cursor:pointer;">'
+              + '<input type="checkbox" value="'+v.rowNum+'|'+escHtml(v.village)+'|'+escHtml(v.area||'')+'" style="cursor:pointer;">'
+              + escHtml(v.village)
+              + (v.area ? ' <span style="font-size:10px;color:#aaa;">('+escHtml(v.area)+')</span>' : '')
+              + '</label>';
+          }).join('')
+          : '<span style="font-size:12px;color:#bbb;">All villages already assigned here</span>')
+        + '</div>'
+        + '<button onclick="vmBulkAssign(\'picker_'+smKey+'\',\''+smKey+'\')" '
+          + 'style="background:#2e7d32;color:#fff;border:none;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px;">✅ Assign Selected</button>'
+        + '<button onclick="vmTogglePicker(\'picker_'+smKey+'\')" '
+          + 'style="background:#888;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer;">Cancel</button>'
         + '</div>';
-    });
-    html += '</div></div>';
+    }
+
+    html += '<div style="border-radius:10px;border:1.5px solid #e0e0e0;overflow:hidden;">'
+      + '<div style="background:'+bg+';padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+      + '<span style="font-size:15px;">'+(isUnassigned?'❓':'👤')+'</span>'
+      + '<span style="font-weight:800;font-size:13px;flex:1;">' + smKey + '</span>'
+      + '<span style="background:rgba(255,255,255,0.7);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700;color:#555;">'
+        + vils.length + ' village' + (vils.length !== 1 ? 's' : '') + '</span>'
+      + addBtnHtml
+      + '</div>'
+      + '<div style="padding:10px 14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">' + chipsHtml + '</div>'
+      + pickerHtml
+      + '</div>';
   });
+
   html += '</div>';
   container.innerHTML = html;
+}
+
+function vmTogglePicker(id) {
+  var el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+function vmBulkAssign(pickerId, salesman) {
+  var picker = document.getElementById(pickerId);
+  if (!picker) return;
+  var checks = picker.querySelectorAll('input[type=checkbox]:checked');
+  if (!checks.length) { showToast('Select at least one village', 1400, '#e65100'); return; }
+  var toAssign = [];
+  checks.forEach(function(cb) {
+    var parts = cb.value.split('|');
+    toAssign.push({ rowNum: parseInt(parts[0], 10), village: parts[1], area: parts[2] });
+  });
+
+  var done = 0;
+  toAssign.forEach(function(item) {
+    gasCall('saveVillage', { village: item.village, area: item.area, salesman: salesman }, function() {
+      // Update local cache
+      for (var i = 0; i < vmData.length; i++) {
+        if (vmData[i].rowNum === item.rowNum) { vmData[i].salesman = salesman; break; }
+      }
+      done++;
+      if (done === toAssign.length) {
+        showToast('✅ ' + done + ' village' + (done>1?'s':'') + ' assigned to ' + salesman, 1800, '#2e7d32');
+        vmRender();
+      }
+    }, function() { showToast('❌ Failed for ' + item.village, 1500, '#c62828'); });
+  });
 }
 
 function vmSave(rowNum, originalVillage) {
