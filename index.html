@@ -2786,43 +2786,59 @@
     <!--  FIELD PICS                                          -->
     <!-- ════════════════════════════════════════════════════ -->
     <div id="section-fieldpics" class="section">
-      <div style="padding:14px 14px 0;">
-        <h2 style="margin:0 0 10px;font-size:16px;color:#e65100;">📸 Field Pics</h2>
 
-        <!-- Filters -->
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
-          <div style="flex:1;min-width:90px;">
-            <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:3px;">Month</div>
-            <select id="fpMonth" style="width:100%;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
-              <option value="1">January</option><option value="2">February</option>
-              <option value="3">March</option><option value="4">April</option>
-              <option value="5">May</option><option value="6">June</option>
-              <option value="7">July</option><option value="8">August</option>
-              <option value="9">September</option><option value="10">October</option>
-              <option value="11">November</option><option value="12">December</option>
-            </select>
+      <!-- Lock Screen -->
+      <div id="fpLockScreen" style="padding:40px 20px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:12px;">📸</div>
+        <div style="font-size:18px;font-weight:700;color:#e65100;margin-bottom:6px;">Field Pics</div>
+        <div style="font-size:13px;color:#777;margin-bottom:20px;">Admin access required</div>
+        <input type="password" id="fpPwd" placeholder="Password"
+          style="padding:10px 16px;border:1.5px solid #ffcc80;border-radius:8px;font-size:15px;width:200px;text-align:center;display:block;margin:0 auto 12px;"
+          onkeydown="if(event.key==='Enter')unlockFieldPics()">
+        <button onclick="unlockFieldPics()"
+          style="background:#e65100;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:15px;font-weight:700;cursor:pointer;">Unlock</button>
+      </div>
+
+      <!-- Content -->
+      <div id="fpContent" style="display:none;">
+        <div style="padding:14px 14px 0;">
+          <h2 style="margin:0 0 10px;font-size:16px;color:#e65100;">📸 Field Pics</h2>
+
+          <!-- Filters -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+            <div style="flex:1;min-width:90px;">
+              <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:3px;">Month</div>
+              <select id="fpMonth" style="width:100%;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
+                <option value="1">January</option><option value="2">February</option>
+                <option value="3">March</option><option value="4">April</option>
+                <option value="5">May</option><option value="6">June</option>
+                <option value="7">July</option><option value="8">August</option>
+                <option value="9">September</option><option value="10">October</option>
+                <option value="11">November</option><option value="12">December</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:80px;">
+              <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:3px;">Year</div>
+              <select id="fpYear" style="width:100%;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;"></select>
+            </div>
+            <div style="flex:2;min-width:120px;">
+              <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:3px;">Salesman</div>
+              <select id="fpSalesman" style="width:100%;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
+                <option value="">All</option>
+              </select>
+            </div>
+            <button onclick="loadFieldPics()" style="background:#e65100;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">🔍 Load</button>
           </div>
-          <div style="flex:1;min-width:80px;">
-            <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:3px;">Year</div>
-            <select id="fpYear" style="width:100%;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;"></select>
-          </div>
-          <div style="flex:2;min-width:120px;">
-            <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:3px;">Salesman</div>
-            <select id="fpSalesman" style="width:100%;padding:8px;border:1.5px solid #c5cae9;border-radius:8px;font-size:13px;">
-              <option value="">All</option>
-            </select>
-          </div>
-          <button onclick="loadFieldPics()" style="background:#e65100;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">🔍 Load</button>
+        </div>
+
+        <!-- Gallery -->
+        <div id="fpGallery" style="padding:0 14px 20px;">
+          <div style="color:#aaa;text-align:center;padding:40px 0;font-size:13px;">Select month and tap Load</div>
         </div>
       </div>
 
-      <!-- Gallery -->
-      <div id="fpGallery" style="padding:0 14px 20px;">
-        <div style="color:#aaa;text-align:center;padding:40px 0;font-size:13px;">Select month and tap Load</div>
-      </div>
-
       <!-- Lightbox -->
-      <div id="fpLightbox" onclick="closeFpLightbox()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9998;display:none;align-items:center;justify-content:center;flex-direction:column;padding:20px;">
+      <div id="fpLightbox" onclick="closeFpLightbox()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9998;align-items:center;justify-content:center;flex-direction:column;padding:20px;">
         <img id="fpLightboxImg" src="" style="max-width:100%;max-height:80vh;border-radius:8px;object-fit:contain;">
         <div id="fpLightboxCaption" style="color:#eee;font-size:12px;margin-top:8px;text-align:center;"></div>
         <a id="fpLightboxLink" href="" target="_blank" style="color:#90caf9;font-size:12px;margin-top:4px;">Open in Drive ↗</a>
@@ -3344,7 +3360,18 @@ function showTab(tab) {
     document.getElementById("section-" + t).classList.toggle("active", t === tab);
     document.getElementById("tab-" + t).classList.toggle("active", t === tab);
   });
-  if (tab === "fieldpics") { initFieldPics(); return; }
+  if (tab === "fieldpics") {
+    if (fpUnlocked) {
+      document.getElementById('fpLockScreen').style.display = 'none';
+      document.getElementById('fpContent').style.display    = 'block';
+      initFieldPics();
+    } else {
+      document.getElementById('fpLockScreen').style.display = 'block';
+      document.getElementById('fpContent').style.display    = 'none';
+      setTimeout(function(){ document.getElementById('fpPwd').focus(); }, 300);
+    }
+    return;
+  }
   if (tab === "calendar") { initCalendarSelectors(); loadCalendar(); return; }
   if (tab === "villagestats") {
     if (vsUnlocked) {
@@ -4967,6 +4994,7 @@ var deliveryUnlocked = false;
 var plannerUnlocked  = false;
 var empUnlocked      = false;
 var vsUnlocked       = false;
+var fpUnlocked       = false;
 var vsAllData        = [];   // full village stats array cached for filtering
 var billRecords     = [];
 var billYearsInited = false;
@@ -7827,6 +7855,17 @@ function submitDayStart() {
   }, function() {
     saveWithCoords('', '');
   }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+function unlockFieldPics() {
+  if (document.getElementById('fpPwd').value === '220285') {
+    fpUnlocked = true;
+    document.getElementById('fpLockScreen').style.display = 'none';
+    document.getElementById('fpContent').style.display    = 'block';
+    initFieldPics();
+  } else {
+    showToast('❌ Wrong password', 1500, '#c62828');
+  }
 }
 
 function unlockVillageStats() {
