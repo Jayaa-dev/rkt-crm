@@ -1817,7 +1817,10 @@
           </div>
         </div>
 
-        <button class="btn-primary" onclick="loadAttendance()">📊 Load Attendance</button>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button class="btn-primary" onclick="loadAttendance()" style="flex:1;">📊 Load Attendance</button>
+          <button onclick="exportAttendanceExcel()" style="flex:1;background:#1b5e20;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">📥 Export Excel</button>
+        </div>
       </div>
 
       <!-- Admin Panel (hidden until unlocked) -->
@@ -3911,6 +3914,69 @@ function loadAttendance() {
 // ════════════════════════════════════════════════════════════
 var _attAdminUnlocked   = false;
 var _attLastData        = null;
+
+function exportAttendanceExcel() {
+  if (!_attLastData || !_attLastData.results || !_attLastData.results.length) {
+    showToast('Load attendance first', 1500, '#e65100');
+    return;
+  }
+
+  var data     = _attLastData;
+  var mNames   = ['','January','February','March','April','May','June',
+                  'July','August','September','October','November','December'];
+  var monthLabel = mNames[data.month] + ' ' + data.year;
+  var days     = data.calendar; // [{day, dateKey, dayName, isSunday}]
+
+  var statusLabel = { present:'P', absent:'A', halfday:'HD', holiday:'H', sunday:'S', future:'-' };
+
+  // ── Header row 1: month title ──
+  var titleRow = ['Attendance Register — ' + monthLabel];
+
+  // ── Header row 2: Name | 1 2 3 ... 31 | Present | Absent | Half Day | Working Days ──
+  var dayHeaders = days.map(function(d){ return d.day + '\n' + d.dayName; });
+  var headerRow  = ['Name'].concat(dayHeaders).concat(['Present','Absent','Half Day','Working Days']);
+
+  // ── Data rows ──
+  var dataRows = data.results.map(function(r) {
+    var presentCount = 0, absentCount = 0, halfCount = 0;
+    var dayCells = days.map(function(d) {
+      var st  = r.dayStatus[d.dateKey] || 'future';
+      var lbl = statusLabel[st] || '-';
+      if (st === 'present')  presentCount += 1;
+      if (st === 'halfday') { presentCount += 0.5; halfCount++; }
+      if (st === 'absent')   absentCount  += 1;
+      return lbl;
+    });
+    var workingDays = days.filter(function(d){ return !d.isSunday; }).length;
+    return [r.salesman].concat(dayCells).concat([presentCount, absentCount, halfCount, workingDays]);
+  });
+
+  // ── Legend row ──
+  var legendRow = ['Legend: P=Present, A=Absent, HD=Half Day, H=Holiday, S=Sunday, -=Future'];
+
+  // ── Build CSV ──
+  var allRows = [titleRow, headerRow].concat(dataRows).concat([[''],[legendRow[0]]]);
+  var csv = '﻿' + allRows.map(function(row) {
+    return row.map(function(cell) {
+      var s = (cell === null || cell === undefined) ? '' : cell.toString();
+      if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1) {
+        return '"' + s.replace(/"/g,'""') + '"';
+      }
+      return s;
+    }).join(',');
+  }).join('\r\n');
+
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href   = url;
+  a.download = 'RKT_Attendance_' + mNames[data.month] + '_' + data.year + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('✅ Attendance exported — ' + data.results.length + ' members', 2000, '#1b5e20');
+}
 var _attPending         = { salesman: null, dateKey: null, currentStatus: null };
 
 var STATUS_LABEL = { present:"✅ Present", halfday:"🌓 Half Day", absent:"❌ Absent", holiday:"🏖️ Holiday", auto:"🔄 Auto (Sheet)", sunday:"📅 Sunday", future:"—" };
