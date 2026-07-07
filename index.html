@@ -2171,7 +2171,21 @@
             <input type="date" id="rptDate">
           </div>
         </div>
-        <button class="btn-primary" onclick="loadReport()" style="margin-top:6px">📊 Load Report</button>
+        <div class="field-row" style="margin-top:8px;">
+          <div class="field">
+            <label>Salesman (Export)</label>
+            <select id="rptExportSalesman">
+              <option value="">All Salesmen</option>
+              <option>Abhishek</option><option>Shivdayal</option>
+              <option>Roduram</option><option>Hemraj</option>
+              <option>Sahil</option><option>Giriraj</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn-primary" onclick="loadReport()" style="flex:1;">📊 Load Report</button>
+          <button onclick="exportSalesmanReport()" style="flex:1;background:#2e7d32;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">📥 Export CSV</button>
+        </div>
       </div>
       <div id="rptContent" style="padding:0 0 20px"></div>
       </div><!-- /rptContent2 -->
@@ -5886,6 +5900,61 @@ function renderFieldMap(data) {
 // ════════════════════════════════════════════════════════════
 // TEAM PERFORMANCE REPORT
 // ════════════════════════════════════════════════════════════
+function exportSalesmanReport() {
+  var month    = document.getElementById('rptMonth').value;
+  var year     = document.getElementById('rptYear').value;
+  var date     = document.getElementById('rptDate').value;
+  var salesman = document.getElementById('rptExportSalesman').value;
+
+  showToast('⏳ Preparing export…', 2000, '#1565c0');
+
+  gasCall('getReportExport', { month: month, year: year, date: date, salesman: salesman }, function(data) {
+    if (!data.rows || !data.rows.length) {
+      showToast('No data found for selected filters', 2000, '#e65100');
+      return;
+    }
+
+    // Build CSV
+    var cols = ['Date','Village','Customer Name','Mobile','Inquiry Status','Salesman','Remarks'];
+    var lines = [cols.join(',')];
+    data.rows.forEach(function(r) {
+      lines.push([
+        r.date,
+        csvCell(r.village),
+        csvCell(r.customer),
+        csvCell(r.mobile),
+        csvCell(r.status),
+        csvCell(r.salesman),
+        csvCell(r.remark)
+      ].join(','));
+    });
+
+    var csv      = '﻿' + lines.join('\r\n'); // BOM for Excel
+    var blob     = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var url      = URL.createObjectURL(blob);
+    var a        = document.createElement('a');
+    var smLabel  = salesman || 'All';
+    var mLabel   = date || (month > 0 ? month + '-' + year : year);
+    a.href       = url;
+    a.download   = 'RKT_Report_' + smLabel + '_' + mLabel + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('✅ ' + data.count + ' records exported', 2000, '#2e7d32');
+  }, function(err) {
+    showToast('❌ Export failed: ' + ((err && err.message) || ''), 2500, '#c62828');
+  });
+}
+
+function csvCell(val) {
+  var s = (val || '').toString();
+  if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
 function loadReport() {
   var month   = document.getElementById("rptMonth").value;
   var year    = document.getElementById("rptYear").value;
