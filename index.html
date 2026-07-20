@@ -5094,7 +5094,7 @@ function searchDeliveryCustomer() {
 
   var now = new Date();
   gasCall("searchCustomersAdvanced", { query: {
-    searchText: "", salesman: "All", status: "All",
+    searchText: "", salesman: "All", status: "Delivered",
     name: name, mobile: mobile, model: model,
     month: month, year: month ? now.getFullYear() : ""
   } },
