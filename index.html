@@ -2275,8 +2275,33 @@
           <div class="card" style="padding:12px;margin-bottom:6px">
             <div class="field-row">
               <div class="field">
-                <label>Mobile / Customer Name</label>
-                <input type="text" id="dlvSearchInput" placeholder="Enter mobile or name"
+                <label>Customer Name</label>
+                <input type="text" id="dlvFilterName" placeholder="Full or partial name"
+                  onkeydown="if(event.key==='Enter') searchDeliveryCustomer()">
+              </div>
+              <div class="field">
+                <label>Mobile Number</label>
+                <input type="tel" id="dlvFilterMobile" placeholder="Mobile no." inputmode="numeric"
+                  oninput="this.value=this.value.replace(/\D/g,'')"
+                  onkeydown="if(event.key==='Enter') searchDeliveryCustomer()">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Month</label>
+                <select id="dlvFilterMonth">
+                  <option value="">All Months</option>
+                  <option value="1">January</option><option value="2">February</option>
+                  <option value="3">March</option><option value="4">April</option>
+                  <option value="5">May</option><option value="6">June</option>
+                  <option value="7">July</option><option value="8">August</option>
+                  <option value="9">September</option><option value="10">October</option>
+                  <option value="11">November</option><option value="12">December</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Model</label>
+                <input type="text" id="dlvFilterModel" placeholder="e.g. Swaraj 744"
                   onkeydown="if(event.key==='Enter') searchDeliveryCustomer()">
               </div>
             </div>
@@ -5054,14 +5079,25 @@ function dlvSetMode(mode) {
 
 // ── SEARCH MODE ──────────────────────────────────────────────
 function searchDeliveryCustomer() {
-  var q = document.getElementById("dlvSearchInput").value.trim();
-  if (!q) { showToast("❌ Enter mobile or customer name", 2500, "#c62828"); return; }
+  var name   = (document.getElementById("dlvFilterName").value   || "").trim();
+  var mobile = (document.getElementById("dlvFilterMobile").value || "").trim();
+  var month  = document.getElementById("dlvFilterMonth").value;
+  var model  = (document.getElementById("dlvFilterModel").value  || "").trim();
+
+  if (!name && !mobile && !month && !model) {
+    showToast("❌ Enter at least one filter", 2500, "#c62828"); return;
+  }
 
   var resultsEl = document.getElementById("dlvSearchResults");
   resultsEl.innerHTML = "<div style='color:#888;font-size:13px;padding:8px 0'>⏳ Searching...</div>";
   document.getElementById("dlvEditForm").style.display = "none";
 
-  gasCall("searchCustomersAdvanced", { query: { searchText: q, salesman: "All", status: "All" } },
+  var now = new Date();
+  gasCall("searchCustomersAdvanced", { query: {
+    searchText: "", salesman: "All", status: "All",
+    name: name, mobile: mobile, model: model,
+    month: month, year: month ? now.getFullYear() : ""
+  } },
     function(rows) {
       if (!Array.isArray(rows) || rows.length === 0) {
         resultsEl.innerHTML = "<div style='color:#999;font-size:13px;padding:8px 0'>No customers found.</div>";
@@ -5078,24 +5114,29 @@ function searchDeliveryCustomer() {
           chasis:       r.chasis       || "",
           amount:       r.rate         || "",
           exchange:     r.exchange     || "",
-          activityType: r.activityType || ""
+          activityType: r.activityType || "",
+          date:         r.date         || ""
         };
       });
       var STATUS_C2 = { Hot:"#e65100", Warm:"#f9a825", Cold:"#1565c0",
                         Contacted:"#2e7d32", Delivered:"#6a1b9a" };
-      var html = "";
+      var html = "<div style='font-size:12px;color:#888;margin-bottom:8px;'>" + rows.length + " record(s) found</div>";
       window._dlvRows.forEach(function(r, idx) {
         var sc = STATUS_C2[r.status] || "#666";
         html += "<div onclick='selectDeliveryCustomer(" + idx + ")' " +
           "style='border:1.5px solid #e0e0e0;border-radius:10px;padding:10px 12px;" +
-          "margin-bottom:8px;cursor:pointer;background:#fff;active:background:#f5f5f5'>" +
-          "<div style='font-weight:700;font-size:13px'>" + (r.customerName || "—") +
-            " <span style='font-size:11px;color:#888'>📱 " + (r.mobile || "—") + "</span></div>" +
-          "<div style='font-size:12px;color:#555;margin-top:3px'>📍 " + (r.village || "—") +
-            " &nbsp;·&nbsp; 👤 " + (r.salesman || "—") + "</div>" +
-          "<div style='font-size:12px;margin-top:3px'>" +
-            "<span style='color:" + sc + ";font-weight:600'>" + (r.status || "—") + "</span>" +
+          "margin-bottom:8px;cursor:pointer;background:#fff;'>" +
+          "<div style='display:flex;justify-content:space-between;align-items:center;'>" +
+            "<div style='font-weight:700;font-size:13px'>" + (r.customerName || "—") + "</div>" +
+            (r.date ? "<div style='font-size:10px;color:#999;'>" + r.date + "</div>" : "") +
+          "</div>" +
+          "<div style='font-size:12px;color:#555;margin-top:3px;'>📱 " + (r.mobile || "—") +
+            " &nbsp;·&nbsp; 📍 " + (r.village || "—") + "</div>" +
+          "<div style='font-size:12px;color:#555;margin-top:2px;'>👤 " + (r.salesman || "—") +
             (r.model ? " &nbsp;·&nbsp; 🚜 " + r.model : "") + "</div>" +
+          "<div style='font-size:12px;margin-top:3px;'>" +
+            "<span style='color:" + sc + ";font-weight:600;'>" + (r.status || "—") + "</span>" +
+          "</div>" +
           "</div>";
       });
       resultsEl.innerHTML = html;
