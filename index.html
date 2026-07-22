@@ -818,6 +818,14 @@
     .day-empty    { background: transparent; }
     .day-admin-edit { cursor: pointer; outline: 2px dashed #1565c0; }
     .day-admin-edit:hover { transform: scale(1.12); transition: transform 0.15s; }
+    /* Activity colour overrides (applied on top of day-present) */
+    .day-act-field    { background: #bbdefb; color: #0d47a1; }   /* Field → light blue */
+    .day-act-showroom { background: #ffe0b2; color: #e65100; }   /* Showroom → amber */
+    .day-act-service  { background: #fff9c4; color: #f57f17; }   /* Service → yellow */
+    .day-act-mixed    { background: #e8f5e9; color: #1b5e20; }   /* Mixed → light green */
+    .act-dot { display:inline-block;width:6px;height:6px;border-radius:50%;margin:1px; }
+    .act-legend { display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px;align-items:center; }
+    .act-legend-item { display:flex;align-items:center;gap:4px;font-size:11px;color:#555; }
 
     /* Admin attendance panel */
     .admin-att-bar {
@@ -4235,17 +4243,80 @@ function renderAttendance(data) {
     holiday: "day-holiday", sunday: "day-sunday",  future:  "day-future"
   };
 
+  // Activity type → CSS class + colour
+  var ACT_META = {
+    "Field Visit":                  { cls:"day-act-field",    dot:"#1565c0", label:"Field" },
+    "Village Visit":                { cls:"day-act-field",    dot:"#1565c0", label:"Field" },
+    "Showroom Visit":               { cls:"day-act-showroom", dot:"#e65100", label:"Showroom" },
+    "Tractor Service-At Field":     { cls:"day-act-service",  dot:"#f57f17", label:"Service" },
+    "Tractor Service-At Showroom":  { cls:"day-act-service",  dot:"#f57f17", label:"Service" },
+    "Tractor Service":              { cls:"day-act-service",  dot:"#f57f17", label:"Service" }
+  };
+
+  function actClass(acts) {
+    if (!acts) return null;
+    var keys = Object.keys(acts);
+    if (keys.length === 0) return null;
+    // Categorise into field / showroom / service
+    var cats = {};
+    keys.forEach(function(k) {
+      var m = ACT_META[k];
+      var cat = m ? m.cls : "day-act-field";
+      cats[cat] = (cats[cat] || 0) + (acts[k] || 1);
+    });
+    var catKeys = Object.keys(cats);
+    if (catKeys.length > 1) return "day-act-mixed";
+    return catKeys[0];
+  }
+
+  function actDots(acts) {
+    if (!acts) return '';
+    var seen = {};
+    var html = '<span style="display:flex;justify-content:center;gap:2px;margin-top:2px;">';
+    Object.keys(acts).forEach(function(k) {
+      var m = ACT_META[k];
+      var color = m ? m.dot : "#888";
+      if (!seen[color]) { seen[color] = true; html += '<span class="act-dot" style="background:' + color + ';"></span>'; }
+    });
+    return html + '</span>';
+  }
+
+  // Build legend HTML
+  var legendHtml = "<div class='act-legend'>" +
+    "<span class='act-legend-item'><span class='act-dot' style='background:#1565c0;width:10px;height:10px;'></span>Field Visit</span>" +
+    "<span class='act-legend-item'><span class='act-dot' style='background:#e65100;width:10px;height:10px;'></span>Showroom</span>" +
+    "<span class='act-legend-item'><span class='act-dot' style='background:#f57f17;width:10px;height:10px;'></span>Service</span>" +
+    "<span class='act-legend-item'><span class='act-dot' style='background:#4caf50;width:10px;height:10px;'></span>Mixed</span>" +
+    "<span class='act-legend-item'><span class='act-dot' style='background:#ffcdd2;width:10px;height:10px;border:1px solid #e57373;'></span>Absent</span>" +
+    "</div>";
+  html += legendHtml;
+
   data.results.forEach(function(r) {
     var presentScore = 0;
-    Object.values(r.dayStatus).forEach(function(st) {
+    Object.keys(r.dayStatus).forEach(function(dk) {
+      var st = r.dayStatus[dk];
       if (st === "present")  presentScore += 1;
       if (st === "halfday")  presentScore += 0.5;
     });
     var pct      = r.workingDays > 0 ? Math.round(presentScore / r.workingDays * 100) : 0;
     var barColor = pct >= 90 ? "#4caf50" : pct >= 70 ? "#ffa726" : "#ef5350";
     var initials = r.salesman.substring(0,2).toUpperCase();
-    var halfCount = Object.values(r.dayStatus).filter(function(s){ return s==="halfday"; }).length;
-    var holCount  = Object.values(r.dayStatus).filter(function(s){ return s==="holiday"; }).length;
+    var halfCount = Object.keys(r.dayStatus).filter(function(dk){ return r.dayStatus[dk]==="halfday"; }).length;
+    var holCount  = Object.keys(r.dayStatus).filter(function(dk){ return r.dayStatus[dk]==="holiday"; }).length;
+
+    var smActMap   = (data.activityMap && data.activityMap[r.salesman]) || {};
+    var smDayStart = (data.dayStartMap  && data.dayStartMap[r.salesman]) || {};
+
+    // Activity count badges
+    var actTotals = r.actCounts || {};
+    var fieldTotal = 0, showroomTotal = 0, serviceTotal = 0;
+    Object.keys(actTotals).forEach(function(k) {
+      var m = ACT_META[k];
+      if (!m) return;
+      if (m.cls === "day-act-field")    fieldTotal    += actTotals[k];
+      if (m.cls === "day-act-showroom") showroomTotal += actTotals[k];
+      if (m.cls === "day-act-service")  serviceTotal  += actTotals[k];
+    });
 
     // Calendar
     var cal = "<div class='cal-grid'>";
@@ -4254,22 +4325,31 @@ function renderAttendance(data) {
     });
     var firstDow = new Date(data.year, data.month - 1, 1).getDay();
     for (var b = 0; b < firstDow; b++) cal += "<div class='cal-day day-empty'></div>";
-    var smDayStart = (data.dayStartMap && data.dayStartMap[r.salesman]) || {};
+
     data.calendar.forEach(function(c2) {
-      var st  = r.dayStatus[c2.dateKey] || "future";
-      var cls = statusClass[st] || "day-future";
-      var lbl = statusLabel[st] || "";
-      var ds  = smDayStart[c2.dateKey];
+      var st   = r.dayStatus[c2.dateKey] || "future";
+      var cls  = statusClass[st] || "day-future";
+      var lbl  = statusLabel[st] || "";
+      var acts = smActMap[c2.dateKey];
+      var ds   = smDayStart[c2.dateKey];
+
+      // Override colour for present days based on activity type
+      if (st === "present" && acts) {
+        var ac = actClass(acts);
+        if (ac) cls = ac;
+      }
+
+      var dotsHtml = (st === "present" && acts) ? actDots(acts) : '';
       var dsHtml = '';
       if (ds && ds.startTime) {
-        dsHtml = '<span style="display:block;font-size:8px;color:#1565c0;font-weight:700;line-height:1.3;margin-top:2px;">' + ds.startTime + '</span>';
-        if (ds.gpsLink) {
-          dsHtml += '<a href="' + ds.gpsLink + '" target="_blank" style="display:block;font-size:9px;line-height:1;" title="View Start Location">📍</a>';
-        }
+        dsHtml = '<span style="display:block;font-size:8px;color:#1565c0;font-weight:700;line-height:1.3;margin-top:1px;">' + ds.startTime + '</span>';
+        if (ds.gpsLink) dsHtml += '<a href="' + ds.gpsLink + '" target="_blank" style="display:block;font-size:9px;line-height:1;" title="View Start Location">📍</a>';
       }
+
       cal += "<div class='cal-day " + cls + "' title='" + c2.dateKey + (ds ? ' — Started: ' + ds.startTime : '') + "'>"
            + "<span class='dn'>" + c2.day + "</span>"
            + "<span class='dl'>" + lbl + "</span>"
+           + dotsHtml
            + dsHtml
            + "</div>";
     });
@@ -4284,10 +4364,15 @@ function renderAttendance(data) {
       "</div>" +
       "<div class='att-stats'>" +
         "<span class='att-badge ab-present'>✅ " + r.presentCount + " Present</span>" +
-        (halfCount ? "<span class='att-badge' style='background:#fff9c4;color:#f57f17'>🌓 " + halfCount + " Half Day</span>" : "") +
+        (halfCount    ? "<span class='att-badge' style='background:#fff9c4;color:#f57f17'>🌓 " + halfCount + " Half Day</span>" : "") +
         "<span class='att-badge ab-absent'>❌ "  + r.absentCount  + " Absent</span>" +
-        (holCount  ? "<span class='att-badge' style='background:#e1bee7;color:#6a1b9a'>🏖️ " + holCount + " Holiday</span>" : "") +
+        (holCount     ? "<span class='att-badge' style='background:#e1bee7;color:#6a1b9a'>🏖️ " + holCount + " Holiday</span>" : "") +
         "<span class='att-badge ab-working'>📅 " + r.workingDays  + " Days</span>" +
+      "</div>" +
+      "<div class='att-stats' style='margin-top:4px;'>" +
+        (fieldTotal    ? "<span class='att-badge' style='background:#bbdefb;color:#0d47a1;'>🌾 " + fieldTotal    + " Field</span>" : "") +
+        (showroomTotal ? "<span class='att-badge' style='background:#ffe0b2;color:#e65100;'>🏪 " + showroomTotal + " Showroom</span>" : "") +
+        (serviceTotal  ? "<span class='att-badge' style='background:#fff9c4;color:#f57f17;'>🔧 " + serviceTotal  + " Service</span>" : "") +
       "</div>" +
       "<div class='pct-bar'><div class='pct-fill' style='width:" + pct + "%;background:" + barColor + "'></div></div>" +
       cal +
