@@ -4078,13 +4078,13 @@ function exportAttendanceExcel() {
   var dayHeaders = days.map(function(d){ return d.day + ' ' + d.dayName; });
   var headerRow  = ['Name','Row'].concat(dayHeaders)
                    .concat(['Present','Absent','Half Day','Working Days',
-                            'Field Days','Showroom Days','Service Days']);
+                            'Field Days','Field Contacts','Showroom Days','Service Days','Service Count']);
 
   var allRows = [titleRow, [''], headerRow];
 
   data.results.forEach(function(r) {
     var presentCount = 0, absentCount = 0, halfCount = 0;
-    var fieldDays = 0, showroomDays = 0, serviceDays = 0;
+    var fieldDays = 0, fieldContacts = 0, showroomDays = 0, serviceDays = 0, serviceEntries = 0;
     var smActs = actMap[r.salesman] || {};
 
     var attCells = days.map(function(d) {
@@ -4093,15 +4093,18 @@ function exportAttendanceExcel() {
       if (st === 'halfday') { presentCount += 0.5; halfCount++; }
       if (st === 'absent')   absentCount++;
 
-      // Count activity category days
-      var dayActs = smActs[d.dateKey] || {};
-      var actKeys = Object.keys(dayActs);
-      var hasField = actKeys.some(function(k){ return k==='Field'||k==='Demo'||k==='Display+Canopy'; });
-      var hasShwrm = actKeys.some(function(k){ return k==='Showroom'||k==='Office Work'; });
-      var hasSvc   = actKeys.some(function(k){ return k.indexOf('Service')>-1; });
-      if (hasField)  fieldDays++;
-      if (hasShwrm)  showroomDays++;
-      if (hasSvc)    serviceDays++;
+      var dayActs  = smActs[d.dateKey] || {};
+      var hasField = false, hasShwrm = false, daySvc = 0, dayTotal = 0;
+      Object.keys(dayActs).forEach(function(k) {
+        var cnt = dayActs[k] || 0;
+        dayTotal += cnt;
+        if (k === 'Field' || k === 'Demo' || k === 'Display+Canopy') hasField = true;
+        if (k === 'Showroom' || k === 'Office Work')                  hasShwrm = true;
+        if (k.indexOf('Service') > -1)                                daySvc  += cnt;
+      });
+      if (hasField)      { fieldDays++;   fieldContacts += dayTotal; }
+      else if (hasShwrm) { showroomDays++; }
+      if (daySvc > 0)    { serviceDays++; serviceEntries += daySvc; }
 
       return statusLabel[st] || '-';
     });
@@ -4111,7 +4114,8 @@ function exportAttendanceExcel() {
     });
 
     var workingDays = days.filter(function(d){ return !d.isSunday; }).length;
-    var summary = [presentCount, absentCount, halfCount, workingDays, fieldDays, showroomDays, serviceDays];
+    var summary = [presentCount, absentCount, halfCount, workingDays,
+                   fieldDays, fieldContacts, showroomDays, serviceDays, serviceEntries];
 
     // Two rows per person: attendance status + activity type
     allRows.push([r.salesman, 'Attendance'].concat(attCells).concat(summary));
@@ -4367,14 +4371,25 @@ function renderAttendance(data) {
     var smDayStart = (data.dayStartMap  && data.dayStartMap[r.salesman]) || {};
 
     // Activity count badges
-    var actTotals = r.actCounts || {};
-    var fieldTotal = 0, showroomTotal = 0, serviceTotal = 0;
-    Object.keys(actTotals).forEach(function(k) {
-      var m = ACT_META[k];
-      if (!m) return;
-      if (m.cls === "day-act-field")    fieldTotal    += actTotals[k];
-      if (m.cls === "day-act-showroom") showroomTotal += actTotals[k];
-      if (m.cls === "day-act-service")  serviceTotal  += actTotals[k];
+    // Field   = unique days with field activity (field > showroom priority); contacts = total entries on those days
+    // Showroom = unique days with showroom/office but NO field that day
+    // Service  = total service entries (count, not days)
+    var fieldDays = 0, fieldContacts = 0, showroomDays = 0, serviceDays = 0, serviceEntries = 0;
+    Object.keys(smActMap).forEach(function(dk) {
+      var dayActs = smActMap[dk] || {};
+      var hasField = false, hasShwrm = false, daySvc = 0, dayEntries = 0;
+      Object.keys(dayActs).forEach(function(k) {
+        var cnt = dayActs[k] || 0;
+        var m   = ACT_META[k];
+        if (!m) return;
+        dayEntries += cnt;
+        if (m.cls === "day-act-field")    hasField = true;
+        if (m.cls === "day-act-showroom") hasShwrm = true;
+        if (m.cls === "day-act-service")  daySvc  += cnt;
+      });
+      if (hasField)      { fieldDays++;   fieldContacts += dayEntries; }
+      else if (hasShwrm) { showroomDays++; }
+      if (daySvc > 0)    { serviceDays++; serviceEntries += daySvc; }
     });
 
     // Calendar
@@ -4427,9 +4442,9 @@ function renderAttendance(data) {
         "<span class='att-badge ab-working'>📅 " + r.workingDays  + " Days</span>" +
       "</div>" +
       "<div class='att-stats' style='margin-top:4px;'>" +
-        (fieldTotal    ? "<span class='att-badge' style='background:#bbdefb;color:#0d47a1;'>🌾 " + fieldTotal    + " Field</span>" : "") +
-        (showroomTotal ? "<span class='att-badge' style='background:#ffe0b2;color:#e65100;'>🏪 " + showroomTotal + " Showroom</span>" : "") +
-        (serviceTotal  ? "<span class='att-badge' style='background:#fff9c4;color:#f57f17;'>🔧 " + serviceTotal  + " Service</span>" : "") +
+        (fieldDays     ? "<span class='att-badge' style='background:#bbdefb;color:#0d47a1;'>🌾 " + fieldDays + " Field (" + fieldContacts + " contacts)</span>" : "") +
+        (showroomDays  ? "<span class='att-badge' style='background:#ffe0b2;color:#e65100;'>🏪 " + showroomDays + " Showroom</span>" : "") +
+        (serviceDays   ? "<span class='att-badge' style='background:#fff9c4;color:#f57f17;'>🔧 " + serviceDays + " Service days (" + serviceEntries + " done)</span>" : "") +
       "</div>" +
       "<div class='pct-bar'><div class='pct-fill' style='width:" + pct + "%;background:" + barColor + "'></div></div>" +
       cal +
