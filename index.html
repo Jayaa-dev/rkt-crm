@@ -247,7 +247,7 @@
 
   // ── gasCall() — replaces all google.script.run calls ──────
   function gasCall(action, params, onSuccess, onFailure) {
-    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride','saveDelivery','saveVillage','deleteVillage','saveRule','deleteRule','generatePlan','updatePlanStatus','saveEmployee','deleteEmployee','sendReminders','assignPlanRow','publishPlan','saveChosenActivity','syncTeamFromCRM','saveDayStart'].indexOf(action) !== -1;
+    var isWrite = ['saveData','saveActivityImage','savePetrolBill','saveAttOverride','saveDelivery','saveVillage','deleteVillage','saveRule','deleteRule','generatePlan','updatePlanStatus','saveEmployee','deleteEmployee','archiveEmployee','restoreEmployee','sendReminders','assignPlanRow','publishPlan','saveChosenActivity','syncTeamFromCRM','saveDayStart'].indexOf(action) !== -1;
     var promise;
     if (isWrite) {
       // POST for write operations (image uploads etc.)
@@ -8223,27 +8223,56 @@ function renderEmployeeList() {
     Dudu:      { bg:'#e3f2fd', color:'#0d47a1' },
     Mauzmabad: { bg:'#fce4ec', color:'#880e4f' }
   };
-  wrap.innerHTML = empList.map(function(e, i) {
-    var rc  = ROLE_COLORS[e.role]     || { bg:'#f5f5f5', color:'#333' };
-    var lc  = LOC_COLORS[e.location]  || { bg:'#f5f5f5', color:'#333' };
+
+  function empRow(e, i, archived) {
+    var rc     = ROLE_COLORS[e.role]    || { bg:'#f5f5f5', color:'#333' };
+    var lc     = LOC_COLORS[e.location] || { bg:'#f5f5f5', color:'#333' };
     var hasKey = !!e.callmebotKey;
-    return '<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #f0f0f0;flex-wrap:wrap;">'
+    var rowStyle = archived
+      ? 'display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f0f0f0;flex-wrap:wrap;opacity:0.6;'
+      : 'display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f0f0f0;flex-wrap:wrap;';
+    return '<div style="' + rowStyle + '">'
       + '<div style="flex:1;min-width:120px;">'
       +   '<div style="font-weight:700;font-size:13px;color:#1a237e;">' + e.name + '</div>'
-      +   '<div style="font-size:11px;color:#888;margin-top:2px;">📱 ' + e.whatsapp + '</div>'
+      +   '<div style="font-size:11px;color:#888;margin-top:2px;">'
+      +     (e.whatsapp ? '📱 ' + e.whatsapp : '')
+      +     (archived && e.archivedAt ? ' &nbsp;·&nbsp; 📦 Archived ' + e.archivedAt : '')
+      +   '</div>'
       + '</div>'
       + '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">'
-      +   '<span style="background:' + rc.bg + ';color:' + rc.color + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">' + e.role + '</span>'
-      +   '<span style="background:' + lc.bg + ';color:' + lc.color + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">' + e.location + '</span>'
-      +   '<span style="background:' + (hasKey?'#e8f5e9':'#fce4ec') + ';color:' + (hasKey?'#2e7d32':'#c62828') + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">' + (hasKey?'✅ WA Ready':'⚠️ No Key') + '</span>'
-      +   (!e.active ? '<span style="background:#f5f5f5;color:#999;font-size:11px;padding:2px 8px;border-radius:10px;">Inactive</span>' : '')
+      +   '<span style="background:' + rc.bg + ';color:' + rc.color + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">' + (e.role||'—') + '</span>'
+      +   '<span style="background:' + lc.bg + ';color:' + lc.color + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">' + (e.location||'—') + '</span>'
+      +   (!archived ? '<span style="background:' + (hasKey?'#e8f5e9':'#fce4ec') + ';color:' + (hasKey?'#2e7d32':'#c62828') + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">' + (hasKey?'✅ WA':'⚠️ No Key') + '</span>' : '')
       + '</div>'
       + '<div style="display:flex;gap:5px;">'
-      +   '<button onclick="editEmployee(' + i + ')" style="background:#e3f2fd;color:#1565c0;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">✏️</button>'
-      +   '<button onclick="confirmDeleteEmployee(' + i + ')" style="background:#fce4ec;color:#c62828;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">🗑</button>'
+      +   (!archived ? '<button onclick="editEmployee(' + i + ')" style="background:#e3f2fd;color:#1565c0;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">✏️</button>' : '')
+      +   (!archived
+          ? '<button onclick="confirmArchiveEmployee(' + i + ')" style="background:#fff3e0;color:#e65100;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;" title="Archive (history kept)">📦 Archive</button>'
+          : '<button onclick="confirmRestoreEmployee(' + i + ')" style="background:#e8f5e9;color:#2e7d32;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">♻️ Restore</button>')
       + '</div>'
       + '</div>';
-  }).join('');
+  }
+
+  var active   = empList.filter(function(e){ return e.active; });
+  var archived = empList.filter(function(e){ return !e.active; });
+
+  var html = '';
+
+  // Active members
+  html += '<div style="font-size:12px;font-weight:700;color:#1565c0;margin-bottom:6px;">✅ Active (' + active.length + ')</div>';
+  if (active.length) {
+    html += active.map(function(e){ return empRow(e, empList.indexOf(e), false); }).join('');
+  } else {
+    html += '<div style="font-size:12px;color:#aaa;padding:6px 0;">No active members.</div>';
+  }
+
+  // Archived members
+  if (archived.length) {
+    html += '<div style="font-size:12px;font-weight:700;color:#888;margin:14px 0 6px;">📦 Archived (' + archived.length + ')</div>';
+    html += archived.map(function(e){ return empRow(e, empList.indexOf(e), true); }).join('');
+  }
+
+  wrap.innerHTML = html;
 }
 
 function editEmployee(idx) {
@@ -8293,14 +8322,25 @@ function saveEmployee() {
   });
 }
 
-function confirmDeleteEmployee(idx) {
+function confirmArchiveEmployee(idx) {
   var e = empList[idx];
-  if (!confirm('Delete ' + e.name + ' from team master?')) return;
-  gasCall('deleteEmployee', { rowNum: e.rowNum }, function() {
-    showToast('🗑 Deleted', 1500, '#555');
+  if (!confirm('Archive ' + e.name + '?\n\nHistory will be preserved. You can restore them anytime.')) return;
+  gasCall('archiveEmployee', { rowNum: e.rowNum }, function() {
+    showToast('📦 ' + e.name + ' archived', 2000, '#e65100');
     loadEmployees();
   });
 }
+
+function confirmRestoreEmployee(idx) {
+  var e = empList[idx];
+  if (!confirm('Restore ' + e.name + ' as active team member?')) return;
+  gasCall('restoreEmployee', { rowNum: e.rowNum }, function() {
+    showToast('✅ ' + e.name + ' restored', 2000, '#2e7d32');
+    loadEmployees();
+  });
+}
+
+function confirmDeleteEmployee(idx) { confirmArchiveEmployee(idx); }
 
 function sendReminderToAll() {
   var msg    = document.getElementById('reminderMsg').value.trim();
