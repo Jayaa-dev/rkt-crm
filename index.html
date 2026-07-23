@@ -4033,47 +4033,97 @@ function exportAttendanceExcel() {
     return;
   }
 
-  var data     = _attLastData;
-  var mNames   = ['','January','February','March','April','May','June',
-                  'July','August','September','October','November','December'];
+  var data       = _attLastData;
+  var mNames     = ['','January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
   var monthLabel = mNames[data.month] + ' ' + data.year;
-  var days     = data.calendar; // [{day, dateKey, dayName, isSunday}]
+  var days       = data.calendar;
+  var actMap     = data.activityMap || {};
 
   var statusLabel = { present:'P', absent:'A', halfday:'HD', holiday:'H', sunday:'S', future:'-' };
 
-  // ── Header row 1: month title ──
-  var titleRow = ['Attendance Register — ' + monthLabel];
+  // Activity type abbreviations for the export
+  var ACT_ABBR = {
+    'Field':                       'FLD',
+    'Demo':                        'DEMO',
+    'Display+Canopy':              'DISP',
+    'Service Camp':                'SVC-CAMP',
+    'Showroom':                    'SHWRM',
+    'Office Work':                 'OFFICE',
+    'Tractor Service-At Field':    'SVC-FLD',
+    'Tractor Service-At Showroom': 'SVC-SHWRM',
+    'Tractor Service':             'SVC'
+  };
 
-  // ── Header row 2: Name | 1 2 3 ... 31 | Present | Absent | Half Day | Working Days ──
-  var dayHeaders = days.map(function(d){ return d.day + '\n' + d.dayName; });
-  var headerRow  = ['Name'].concat(dayHeaders).concat(['Present','Absent','Half Day','Working Days']);
+  function dayActLabel(smName, dateKey) {
+    var dayActs = (actMap[smName] || {})[dateKey];
+    if (!dayActs) return '';
+    var keys = Object.keys(dayActs);
+    if (keys.length === 0) return '';
+    // Sort by count desc, pick top 2
+    keys.sort(function(a,b){ return dayActs[b] - dayActs[a]; });
+    return keys.slice(0,2).map(function(k){ return ACT_ABBR[k] || k; }).join('+');
+  }
 
-  // ── Data rows ──
-  var dataRows = data.results.map(function(r) {
+  // ── Title ──
+  var titleRow  = ['RKT Motors — Attendance Register (' + monthLabel + ')'];
+
+  // ── Header ──
+  var dayHeaders = days.map(function(d){ return d.day + ' ' + d.dayName; });
+  var headerRow  = ['Name','Row'].concat(dayHeaders)
+                   .concat(['Present','Absent','Half Day','Working Days',
+                            'Field Days','Showroom Days','Service Days']);
+
+  var allRows = [titleRow, [''], headerRow];
+
+  data.results.forEach(function(r) {
     var presentCount = 0, absentCount = 0, halfCount = 0;
-    var dayCells = days.map(function(d) {
+    var fieldDays = 0, showroomDays = 0, serviceDays = 0;
+    var smActs = actMap[r.salesman] || {};
+
+    var attCells = days.map(function(d) {
       var st  = r.dayStatus[d.dateKey] || 'future';
-      var lbl = statusLabel[st] || '-';
-      if (st === 'present')  presentCount += 1;
+      if (st === 'present')  presentCount++;
       if (st === 'halfday') { presentCount += 0.5; halfCount++; }
-      if (st === 'absent')   absentCount  += 1;
-      return lbl;
+      if (st === 'absent')   absentCount++;
+
+      // Count activity category days
+      var dayActs = smActs[d.dateKey] || {};
+      var actKeys = Object.keys(dayActs);
+      var hasField = actKeys.some(function(k){ return k==='Field'||k==='Demo'||k==='Display+Canopy'; });
+      var hasShwrm = actKeys.some(function(k){ return k==='Showroom'||k==='Office Work'; });
+      var hasSvc   = actKeys.some(function(k){ return k.indexOf('Service')>-1; });
+      if (hasField)  fieldDays++;
+      if (hasShwrm)  showroomDays++;
+      if (hasSvc)    serviceDays++;
+
+      return statusLabel[st] || '-';
     });
+
+    var actCells = days.map(function(d) {
+      return dayActLabel(r.salesman, d.dateKey);
+    });
+
     var workingDays = days.filter(function(d){ return !d.isSunday; }).length;
-    return [r.salesman].concat(dayCells).concat([presentCount, absentCount, halfCount, workingDays]);
+    var summary = [presentCount, absentCount, halfCount, workingDays, fieldDays, showroomDays, serviceDays];
+
+    // Two rows per person: attendance status + activity type
+    allRows.push([r.salesman, 'Attendance'].concat(attCells).concat(summary));
+    allRows.push(['',         'Activity'  ].concat(actCells).concat(['','','','','','','']));
+    allRows.push(['']); // blank spacer
   });
 
-  // ── Legend row ──
-  var legendRow = ['Legend: P=Present, A=Absent, HD=Half Day, H=Holiday, S=Sunday, -=Future'];
+  // ── Legend ──
+  allRows.push(['']);
+  allRows.push(['Legend — Attendance: P=Present  A=Absent  HD=Half Day  H=Holiday  S=Sunday  -=Future']);
+  allRows.push(['Legend — Activity:   FLD=Field  DEMO=Demo  DISP=Display+Canopy  SHWRM=Showroom  OFFICE=Office Work  SVC-FLD=Service@Field  SVC-SHWRM=Service@Showroom  SVC-CAMP=Service Camp']);
 
   // ── Build CSV ──
-  var allRows = [titleRow, headerRow].concat(dataRows).concat([[''],[legendRow[0]]]);
   var csv = '﻿' + allRows.map(function(row) {
     return row.map(function(cell) {
       var s = (cell === null || cell === undefined) ? '' : cell.toString();
-      if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1) {
-        return '"' + s.replace(/"/g,'""') + '"';
-      }
+      if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1)
+        return '"' + s.replace(/"/g, '""') + '"';
       return s;
     }).join(',');
   }).join('\r\n');
@@ -4243,11 +4293,14 @@ function renderAttendance(data) {
     holiday: "day-holiday", sunday: "day-sunday",  future:  "day-future"
   };
 
-  // Activity type → CSS class + colour
+  // Activity type → CSS class + colour  (values must match the form dropdown exactly)
   var ACT_META = {
-    "Field Visit":                  { cls:"day-act-field",    dot:"#1565c0", label:"Field" },
-    "Village Visit":                { cls:"day-act-field",    dot:"#1565c0", label:"Field" },
-    "Showroom Visit":               { cls:"day-act-showroom", dot:"#e65100", label:"Showroom" },
+    "Field":                        { cls:"day-act-field",    dot:"#1565c0", label:"Field" },
+    "Demo":                         { cls:"day-act-field",    dot:"#1565c0", label:"Demo" },
+    "Display+Canopy":               { cls:"day-act-field",    dot:"#0d47a1", label:"Display" },
+    "Service Camp":                 { cls:"day-act-service",  dot:"#f57f17", label:"Service Camp" },
+    "Showroom":                     { cls:"day-act-showroom", dot:"#e65100", label:"Showroom" },
+    "Office Work":                  { cls:"day-act-showroom", dot:"#e65100", label:"Office" },
     "Tractor Service-At Field":     { cls:"day-act-service",  dot:"#f57f17", label:"Service" },
     "Tractor Service-At Showroom":  { cls:"day-act-service",  dot:"#f57f17", label:"Service" },
     "Tractor Service":              { cls:"day-act-service",  dot:"#f57f17", label:"Service" }
