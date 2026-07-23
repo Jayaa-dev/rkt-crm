@@ -4039,6 +4039,12 @@ function exportAttendanceExcel() {
   var monthLabel = mNames[data.month] + ' ' + data.year;
   var days       = data.calendar;
   var actMap     = data.activityMap || {};
+  console.log('activityMap keys:', Object.keys(actMap));
+
+  if (Object.keys(actMap).length === 0) {
+    showToast('⚠️ Activity data missing — please redeploy Apps Script, reload attendance, then export again', 4000, '#e65100');
+    // still continue and export attendance-only
+  }
 
   var statusLabel = { present:'P', absent:'A', halfday:'HD', holiday:'H', sunday:'S', future:'-' };
 
