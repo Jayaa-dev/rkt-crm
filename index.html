@@ -7948,23 +7948,38 @@ function addNewVillageToMaster() {
 // ── Day Start ──────────────────────────────────────────────────
 var dsLat = '', dsLng = '';
 
+var FALLBACK_TEAM = ["Abhishek","Shivdayal","Roduram","Hemraj","Sahil","Giriraj"];
+
 function loadActiveSalesTeam(callback) {
   gasCall('getEmployees', {}, function(data) {
     var active = (data.employees || []).filter(function(e) {
       return e.active && (e.role === 'Sales' || e.role === 'Mechanic' || e.role === 'Manager');
     });
+    // Fall back to hardcoded list if EmployeeMaster is empty
+    var names = active.length
+      ? active.map(function(e){ return e.name; })
+      : FALLBACK_TEAM;
     var sel = document.getElementById('salesman');
     var cur = sel.value;
     sel.innerHTML = '<option value="">Select</option>';
-    active.forEach(function(e) {
+    names.forEach(function(name) {
       var o = document.createElement('option');
-      o.value = e.name; o.textContent = e.name;
+      o.value = name; o.textContent = name;
       sel.appendChild(o);
     });
     if (cur) sel.value = cur;
     if (callback) callback();
   }, function() {
-    // On error keep whatever is in the dropdown, still proceed
+    // On API error fall back to hardcoded list
+    var sel = document.getElementById('salesman');
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">Select</option>';
+    FALLBACK_TEAM.forEach(function(name) {
+      var o = document.createElement('option');
+      o.value = name; o.textContent = name;
+      sel.appendChild(o);
+    });
+    if (cur) sel.value = cur;
     if (callback) callback();
   });
 }
