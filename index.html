@@ -1406,12 +1406,6 @@
             <label>Salesman</label>
             <select id="salesman">
               <option value="">Select</option>
-              <option>Abhishek</option>
-              <option>Shivdayal</option>
-              <option>Roduram</option>
-              <option>Hemraj</option>
-              <option>Sahil</option>
-              <option>Giriraj</option>
             </select>
           </div>
           <div class="field">
@@ -3364,8 +3358,8 @@ window.onload = function() {
   // Quote
   document.getElementById("quoteBox").textContent = QUOTES[new Date().getDate() % QUOTES.length];
 
-  // Day Start init (after brief delay so salesman dropdown is rendered)
-  setTimeout(initDayStart, 300);
+  // Load active sales team into salesman dropdowns, then init Day Start
+  loadActiveSalesTeam(function() { initDayStart(); });
 
   // Attendance year dropdown
   var yr = new Date().getFullYear();
@@ -7953,6 +7947,27 @@ function addNewVillageToMaster() {
 
 // ── Day Start ──────────────────────────────────────────────────
 var dsLat = '', dsLng = '';
+
+function loadActiveSalesTeam(callback) {
+  gasCall('getEmployees', {}, function(data) {
+    var active = (data.employees || []).filter(function(e) {
+      return e.active && (e.role === 'Sales' || e.role === 'Mechanic' || e.role === 'Manager');
+    });
+    var sel = document.getElementById('salesman');
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">Select</option>';
+    active.forEach(function(e) {
+      var o = document.createElement('option');
+      o.value = e.name; o.textContent = e.name;
+      sel.appendChild(o);
+    });
+    if (cur) sel.value = cur;
+    if (callback) callback();
+  }, function() {
+    // On error keep whatever is in the dropdown, still proceed
+    if (callback) callback();
+  });
+}
 
 function initDayStart() {
   // Populate salesman dropdown from existing salesman select
