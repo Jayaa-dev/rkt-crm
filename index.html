@@ -3546,11 +3546,13 @@ function checkCustomer() {
           "Village: " + (res.village||"") + "<br>" +
           "Salesman: " + (res.salesman||"") + " &nbsp;|&nbsp; Status: <b>" + (res.enquiryType||"") + "</b>";
 
-        // Lock identity fields
-        document.getElementById("customerName").readOnly  = true;
+        // Lock identity fields — activity type stays editable for today's visit
+        // Allow name edit only if blank/null on existing record
+        var hasName = !!(res.customerName && res.customerName !== 'null');
+        document.getElementById("customerName").readOnly  = hasName;
         document.getElementById("mobile").readOnly        = true;
         document.getElementById("salesman").disabled      = true;
-        document.getElementById("activityType").disabled  = true;
+        document.getElementById("activityType").disabled  = false;
         document.getElementById("submitBtn").textContent  = "✏️ Update Customer";
         document.getElementById("newEntryBtn").style.display = "inline-block";
 
@@ -3608,8 +3610,9 @@ function fillCustomerFields(d) {
 function setVal(id, val) {
   var el = document.getElementById(id);
   if (!el) return;
-  // Try exact match first
-  el.value = val || "";
+  // Treat JS null, undefined, and the string "null" as empty
+  var clean = (val === null || val === undefined || val === 'null' || val === 'undefined') ? '' : val;
+  el.value = clean || "";
   // If select and value didn't set (case mismatch), try case-insensitive match
   if (el.tagName === "SELECT" && el.value !== (val || "")) {
     var lower = String(val || "").toLowerCase().trim();
@@ -3638,7 +3641,7 @@ function editCustomer(rowNumber) {
       document.getElementById("customerName").readOnly  = true;
       document.getElementById("mobile").readOnly        = true;
       document.getElementById("salesman").disabled      = true;
-      document.getElementById("activityType").disabled  = true;
+      document.getElementById("activityType").disabled  = false;
       document.getElementById("editMode").value         = "Y";
       document.getElementById("submitBtn").textContent  = "✏️ Update Customer";
       document.getElementById("newEntryBtn").style.display = "inline-block";
