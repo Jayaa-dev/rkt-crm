@@ -1,5 +1,5 @@
-// RKT Motors CRM — Service Worker v1.3
-var CACHE   = 'rkt-crm-v4';
+// RKT Motors CRM — Service Worker v1.5
+var CACHE   = 'rkt-crm-v6';
 var ASSETS  = [
   '/rkt-crm/',
   '/rkt-crm/index.html',
@@ -35,6 +35,66 @@ self.addEventListener('activate', function(e) {
     })
   );
   return self.clients.claim();
+});
+
+// ── Notification click → open app to Daily tab ──────────────
+self.addEventListener('notificationclick', function(e) {
+  e.notification.close();
+  var action = e.action;
+  if (action === 'dismiss') return;
+
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(function(clientList) {
+        for (var i = 0; i < clientList.length; i++) {
+          var c = clientList[i];
+          if (c.url.indexOf('/rkt-crm/') !== -1 && 'focus' in c) {
+            c.focus();
+            c.postMessage({ type: 'OPEN_DAILY' });
+            return;
+          }
+        }
+        return self.clients.openWindow('/rkt-crm/?tab=daily');
+      })
+  );
+});
+
+// ── Push event (server-push / future VAPID use) ──────────────
+self.addEventListener('push', function(e) {
+  var data = {};
+  try { data = e.data ? e.data.json() : {}; } catch(err) {}
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'RKT CRM Reminder', {
+      body:   data.body  || 'Time to log your field entries!',
+      icon:   '/rkt-crm/icons/icon-192.png',
+      badge:  '/rkt-crm/icons/icon-192.png',
+      tag:    'rkt-crm-push',
+      requireInteraction: false,
+      actions: [
+        { action: 'open',    title: '📋 Open CRM' },
+        { action: 'dismiss', title: 'Dismiss' }
+      ],
+      data: data
+    })
+  );
+});
+
+// ── Message from page → trigger notification immediately ─────
+self.addEventListener('message', function(e) {
+  if (!e.data) return;
+  if (e.data.type === 'SHOW_NOTIFICATION') {
+    self.registration.showNotification(e.data.title || 'RKT CRM', {
+      body:   e.data.body  || '',
+      icon:   '/rkt-crm/icons/icon-192.png',
+      badge:  '/rkt-crm/icons/icon-192.png',
+      tag:    e.data.tag   || 'rkt-crm-reminder',
+      requireInteraction: false,
+      actions: [
+        { action: 'open',    title: '📋 Open CRM' },
+        { action: 'dismiss', title: 'Dismiss' }
+      ]
+    });
+  }
 });
 
 // Fetch — Network first (always latest), fallback to cache when offline
