@@ -3508,7 +3508,7 @@ var dashLoaded = false;
 function toggleFields() {
   var v = document.getElementById("activityType").value;
   var isService  = v === "Tractor Service-At Field" || v === "Tractor Service-At Showroom";
-  var isShowroom = v === "Showroom";
+  var isShowroom = v === "Showroom" || v === "Office Work";
   var isSales    = !isService && !isShowroom;
 
   document.getElementById("salesFields").classList.toggle("hidden", !isSales);
