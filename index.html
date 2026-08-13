@@ -1814,10 +1814,7 @@
           <div class="field">
             <label>Member</label>
             <select id="attSalesman">
-              <option value="All">All</option>
-              <option>Abhishek</option><option>Shivdayal</option>
-              <option>Roduram</option><option>Hemraj</option>
-              <option>Sahil</option><option>Giriraj</option>
+              <option value="All">All Active</option>
             </select>
           </div>
         </div>
@@ -3358,8 +3355,9 @@ window.onload = function() {
   // Quote
   document.getElementById("quoteBox").textContent = QUOTES[new Date().getDate() % QUOTES.length];
 
-  // Load active sales team into salesman dropdowns, then init Day Start
+  // Load team into salesman dropdowns (daily + attendance), then init Day Start
   loadActiveSalesTeam(function() { initDayStart(); });
+  loadAttendanceSalesmanDropdown();
 
   // Attendance year dropdown
   var yr = new Date().getFullYear();
@@ -7952,6 +7950,45 @@ function addNewVillageToMaster() {
 var dsLat = '', dsLng = '';
 
 var FALLBACK_TEAM = ["Abhishek","Shivdayal","Roduram","Hemraj","Sahil","Giriraj"];
+
+function loadAttendanceSalesmanDropdown() {
+  gasCall('getEmployees', {}, function(data) {
+    var all      = data.employees || [];
+    var active   = all.filter(function(e){ return e.active; });
+    var archived = all.filter(function(e){ return !e.active; });
+    var sel      = document.getElementById('attSalesman');
+    sel.innerHTML = '<option value="All">All Active</option>';
+
+    // Active members
+    active.forEach(function(e) {
+      var o = document.createElement('option');
+      o.value = e.name; o.textContent = e.name;
+      sel.appendChild(o);
+    });
+
+    // Archived members in a separate group
+    if (archived.length) {
+      var grp = document.createElement('optgroup');
+      grp.label = '── Archived ──';
+      archived.forEach(function(e) {
+        var o = document.createElement('option');
+        o.value = e.name;
+        o.textContent = e.name + ' (archived)';
+        grp.appendChild(o);
+      });
+      sel.appendChild(grp);
+    }
+
+    // Fallback if sheet empty
+    if (!active.length && !archived.length) {
+      FALLBACK_TEAM.forEach(function(name) {
+        var o = document.createElement('option');
+        o.value = name; o.textContent = name;
+        sel.appendChild(o);
+      });
+    }
+  });
+}
 
 function loadActiveSalesTeam(callback) {
   gasCall('getEmployees', {}, function(data) {
